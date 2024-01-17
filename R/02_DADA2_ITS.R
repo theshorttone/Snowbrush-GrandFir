@@ -37,7 +37,6 @@ nthreads <- parallel::detectCores() - 1
 # PARSE FILE PATHS ####
 
 # File parsing - 
-"R1_ITS2.fastq.gz"
 path <- "./Data/Raw/ITS" # CHANGE to the directory containing your adaptor-free demultiplexed fastq files when using your own data
 filtpath <- file.path(path, "filtered") # Filtered files go into the filtered/ subdirectory
 if(!file_test("-d", filtpath)) dir.create(filtpath) # make directory for filtered fqs if not already present
@@ -47,8 +46,7 @@ if(!file_test("-d", filtpath)) dir.create(filtpath) # make directory for filtere
 # "...pass_2.fastq.gz" for reverse reads
 
 # using only fwd reads for fungal ITS2
-fns <- sort(list.files(file.path(path), full.names = TRUE, pattern = "R1_ITS2.fastq.gz")) # make pattern match your FWD reads
-
+fns <- sort(list.files(file.path(path), full.names = TRUE, pattern = "R1_001.ITS2.fastq.gz")) # make pattern match your FWD reads
 sample.names <- basename(fns) %>% str_split("_") %>% map_chr(1)
 
 # visualize a couple of fwd read quality profiles to help select reasonable filtration parameters
@@ -70,10 +68,10 @@ filts_f <- file.path(path, "filtered", paste0(sample.names, "_FWD_filt.fastq.gz"
 # These values are informed by our quality plots
 out <- filterAndTrim(fns, filts_f, # input and output file names as denoted above
                      maxN=0, # uncalled bases are currently not supported in dada2
-                     maxEE=c(2), # refers to the maximum expected errors allowed
+                     # maxEE=c(3), # refers to the maximum expected errors allowed
                      truncQ=2, # special value denoting "end of good quality sequence" (optional)
                      rm.phix=TRUE, # automatically remove PhiX spike-in reads from sequencing center
-                     truncLen = c(300), # refers to the lengths at which to truncate Fwd and Rev reads, respectively 
+                     # truncLen = c(200), # refers to the lengths at which to truncate Fwd and Rev reads, respectively 
                      compress=TRUE, # compress output files with gzip
                      multithread=nthreads) # On Windows set multithread=FALSE
 
@@ -108,20 +106,14 @@ ggsave("./Output/ITS_error_model.png",dpi=300,height = 6,width = 6)
 out
 
 ###########################################################
-# IF DATA WON'T FIT IN MEMORY
-# Can do derep and dada one sample at a time in a for-loop
-names(filts_f) <- sample.names
-dada_f <- vector("list",length(sample.names))
-names(dada_f) <- sample.names
+# Run DADA2 algorithm
 
-for(sam in sample.names){
-  cat("Processing: ", sam, "\n")
-  derep_f <- derepFastq(filts_f[[sam]])
-  dada_f[[sam]] <- dada(derep_f,err = errF,multithread=TRUE,selfConsist = TRUE)
-}
-##############################################################
+derep_f <- derepFastq(filts_f)
+dada_f <- dada(derep_f,err = errF,multithread=TRUE,selfConsist = TRUE,pool = "pseudo")
+saveRDS(dada_f,"Output/ITS_dadaFs.RDS")
 
 
+# Make sequence table
 seqtab <- makeSequenceTable(dada_f)
 
 # REMOVE CHIMERAS ####
@@ -149,21 +141,31 @@ write.csv(track, file = "./Output/ITS_read_counts_at_each_step.csv", row.names =
 
 # IMPORT METADATA ####
 
+# IMPORT METADATA ####
+
 # import and clean
 meta <- read_csv("./Data/Sample_Metadata_Full.csv") %>% 
   janitor::clean_names() %>% 
   dplyr::filter(amplicon == "ITS2") # just bacteria samples for this
-
 # subset to match seq table sample names
 meta <- meta[meta$sample_name %in% (sample.names %>% str_split("_") %>% map_chr(1)), ]
 row.names(seqtab.nochim) <- row.names(seqtab.nochim) %>% str_split("_") %>% map_chr(1)
+row.names(meta) <- meta$sample_name
+
+negative_ctls <- row.names(seqtab.nochim[which(!row.names(seqtab.nochim) %in% row.names(meta)),])
+row.names(seqtab.nochim)
+row.names(meta)
+seqtab.nochim <- seqtab.nochim[!row.names(seqtab.nochim) %in% negative_ctls,]
+
 # reorder metadata to match seqtab
 df <- data.frame(seqtab_rows=row.names(seqtab.nochim),
                  sample_name=row.names(seqtab.nochim))
 df2 <- left_join(meta,df,by="sample_name")
 row.names(df2) <- df2$sample_name
-meta <- df2[row.names(seqtab.nochim),]
 row.names(meta) <- meta$sample_name
+meta <- meta[row.names(seqtab.nochim),]
+row.names(meta) <- meta$sample_name
+
 identical(row.names(meta),row.names(seqtab.nochim))
 
 
@@ -176,32 +178,14 @@ seqtab.nochim <- seqtab.nochim[,colSums(seqtab.nochim) > 1]
 
 # save cleaned up seqtab
 saveRDS(seqtab.nochim,"./Output/ITS_seqtab.nochim.clean.RDS")
-seqtab.nochim <- readRDS("./Output/ITS_seqtab.nochim.clean.RDS")
-# Find and remove contaminants ####
-# Find and remove contaminants ####
-contams = isContaminant(seqtab.nochim, neg = (meta$control == "Negative"), normalize = TRUE)
-contams[contams$contaminant,]
-table(contams$contaminant) # how many taxa are contaminants?
-write.csv(contams, file = "./Output/ITS_likely_contaminants.csv", row.names = TRUE)
 
-# remove contaminant sequences and control samples from both tables, respectively ####
-seqtab.nochim = seqtab.nochim[,(which(contams$contaminant != TRUE))]
-seqtab.nochim = seqtab.nochim[(meta$control != "Negative"),]
-meta = meta[(meta$control != "Negative"),]
-dim(seqtab.nochim)
-
-
-
-saveRDS(seqtab.nochim,"./Output/ITS_seqtab.nochim.clean.RDS")
 # ASSIGN TAXONOMY ####
 
-# Use UNITE+Euk
-# ran on cluster...
-# taxa <- assignTaxonomy(seqtab.nochim, "./Taxonomy/sh_general_release_dynamic_all_25.07.2023.fasta.gz", multithread=4)
-taxa <- readRDS("./Output/ITS2_Taxonomy.RDS")
+# Use RDP training set for 16S
+taxa <- assignTaxonomy(seqtab.nochim, "./Taxonomy/sh_general_release_dynamic_all_18.07.2023_dev.fasta.gz", multithread=nthreads,tryRC = TRUE,verbose = TRUE)
+
 # Save intermediate taxonomy file
 saveRDS(taxa, file = "./Output/ITS_RDP_Taxonomy_from_dada2.RDS")
-
 
 # inspect taxonomy
 taxa.print <- taxa # Removing sequence rownames for display only

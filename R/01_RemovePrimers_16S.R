@@ -26,7 +26,7 @@ library(ShortRead); packageVersion("ShortRead")
 # PARSE FILE PATHS ####
 
 # File parsing
-path <- "./Data/LetendreV6V8" # CHANGE to the subdirectory containing your demultiplexed fastq files
+path <- "./Data/Raw/16S" # CHANGE to the subdirectory containing your demultiplexed fastq files
 fnFs <- sort(list.files(path, pattern = "R1_001.fastq.gz", full.names = TRUE))
 fnRs <- sort(list.files(path, pattern = "R2_001.fastq.gz", full.names = TRUE))
 
@@ -108,3 +108,7 @@ rbind(FWD.ForwardReads = sapply(FWD.orients, primerHits, fn = fnFs.cut[[1]]),
 fnFs.clean <- fnFs.cut %>% str_replace("_R1","_clean_R1")
 fnRs.clean <- fnRs.cut %>% str_replace("_R2","_clean_R2")
 filterAndTrim(fnFs.cut,fnFs.clean,fnRs.cut,fnRs.clean,minLen = 100,multithread=4)
+
+# clean up tmp files
+file.remove(fnFs.filtN)
+file.remove(fnRs.filtN)
