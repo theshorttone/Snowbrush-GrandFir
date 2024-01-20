@@ -19,7 +19,7 @@ library(patchwork); packageVersion("patchwork")
 library(BacDive); packageVersion("BacDive")
 
 # Random seed
-set.seed(8675309)
+set.seed(666)
 
 
 # Data

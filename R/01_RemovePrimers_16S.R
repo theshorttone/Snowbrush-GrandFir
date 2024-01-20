@@ -1,6 +1,5 @@
 # -----------------------------------------------------------------------------#
-# V6V8
-# remove adaptors
+# Remove adaptors using cutadapt
 # Author: Geoffrey Zahn
 # Software versions:  R v 4.2.2
 #                     tidyverse v 1.3.2

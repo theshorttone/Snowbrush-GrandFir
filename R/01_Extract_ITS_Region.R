@@ -1,8 +1,10 @@
-# ------------------------------------------------------------------------------------------------#
-# Extract ITS1 region for a given SRA project
-# Apply this script to each SRA Accession directory on FWD reads only
+# -----------------------------------------------------------------------------#
+# Remove adaptors using cutadapt
 # Author: Geoffrey Zahn
-# Requirements: itsxpress (available in miniconda3)
+# Software versions:  R v 4.2.2
+#                     tidyverse v 1.3.2
+#                     parallel v 4.3.2
+#                     itsxpress v 2.0.1
 # ------------------------------------------------------------------------------------------------#
 
 # load packages

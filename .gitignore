@@ -7,6 +7,10 @@ Notes/
 # taxaonomic databases
 Taxonomy/
 
+# Big files
+./Output/16S_ML_Distance.RDS
+
+
 # History files
 .Rhistory
 .Rapp.history
