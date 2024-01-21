@@ -18,6 +18,13 @@ library(phyloseq); packageVersion("phyloseq")
 library(patchwork); packageVersion("patchwork")
 library(BacDive); packageVersion("BacDive")
 
+clean_model_df <- function(x){
+  broom.mixed::tidy(x) %>% 
+    mutate(term=term %>% str_remove("indicator")) %>% 
+    mutate(across(where(is.numeric),function(z){round(z,4)}))
+}
+
+
 # Random seed
 set.seed(666)
 
@@ -86,7 +93,7 @@ saveRDS(bact_trait_db,"./Output/16S_Bacterial_Trait_Database.RDS")
 # reload point, for convenience
 bact_trait_db <- readRDS("./Output/16S_Bacterial_Trait_Database.RDS")
         
-# EXPLORE ####
+# IDENTIFY PATHOGENIC GENERA ####
 # This database is a highly nested and confusing pile of information
 # access looks something like
 bact_trait_db$Rhizobium$`132155`$`Physiology and metabolism`
@@ -152,10 +159,104 @@ for(i in genus_list){
   pathogen_list[i] <- 
   bact_trait_db[[i]] %>% 
     unlist() %>% 
-    grepl(pattern="pathogen") %>% 
+    grepl(pattern="pathogen", ignore.case = TRUE) %>% 
     any()
 }
 pathogen_list <- pathogen_list %>% which %>% names
+# export
+saveRDS(pathogen_list,"./Output/list_of_pathogenic_bacterial_genera.RDS")
 
 
+# CALCULATE BACTERIAL GUILD PROPORTIONS ####
 
+# find proportions of "pathogenic" genera
+pathogen_proportions <- 
+  bact %>% 
+  tax_glom("Genus") %>% 
+  transform_sample_counts(function(x){x/sum(x)}) %>% 
+  subset_taxa(bact@tax_table[,6] %in% pathogen_list) %>% 
+  sample_sums()
+
+# build data frame for modeling
+pathogen_df <- 
+  microbiome::meta(bact) %>% 
+  mutate(proportion_pathogen = pathogen_proportions)
+
+# REGRESSION PLOTS ####
+grandfir_pathogen_plot <-
+  pathogen_df %>% 
+  dplyr::filter(species == "GrandFir") %>% 
+  mutate(across(c("wilting_scale","bud_number","leaf_number",
+                  "leaf_length","height","shoot_dm","final_root_dm"),
+                scale)) %>% # scale/center all indicators
+  pivot_longer(c("wilting_scale","bud_number","leaf_number",
+                 "leaf_length","height","shoot_dm","final_root_dm"),
+               names_to="indicator") %>% 
+  mutate(indicator = indicator %>% str_replace_all("_"," ") %>% str_to_sentence()) %>% 
+  ggplot(aes(x=proportion_pathogen,y=value,color=drought)) +
+  geom_point(alpha=.5) +
+  geom_smooth(method='lm',se=FALSE) +
+  facet_wrap(~indicator,scales = 'free') +
+  theme_minimal() +
+  theme(strip.text = element_text(face="bold",size=12)) +
+  labs(x="Proportion of pathogenic bacterial genera",y="Scaled/Centered Value",color="Drought") +
+  scale_color_manual(values = pal.discrete[c(2,7)])
+saveRDS(grandfir_pathogen_plot,"./Output/figs/16S_Pathogen_Plot_grandfir.RDS")
+
+snowbrush_pathogen_plot <-
+  pathogen_df %>% 
+  dplyr::filter(species == "Snowbrush") %>% 
+  mutate(across(c("wilting_scale","bud_number","leaf_number",
+                  "leaf_length","height","shoot_dm","final_root_dm"),
+                scale)) %>% # scale/center all indicators
+  pivot_longer(c("wilting_scale","bud_number","leaf_number",
+                 "leaf_length","height","shoot_dm","final_root_dm"),
+               names_to="indicator") %>% 
+  mutate(indicator = indicator %>% str_replace_all("_"," ") %>% str_to_sentence()) %>% 
+  ggplot(aes(x=proportion_pathogen,y=value,color=drought)) +
+  geom_point(alpha=.5) +
+  geom_smooth(method='lm',se=FALSE) +
+  facet_wrap(~indicator,scales = 'free') +
+  theme_minimal() +
+  theme(strip.text = element_text(face="bold",size=12)) +
+  labs(x="Proportion of pathogenic bacterial genera",y="Scaled/Centered Value",color="Drought") +
+  scale_color_manual(values = pal.discrete[c(2,7)])
+saveRDS(snowbrush_pathogen_plot,"./Output/figs/16S_Pathogen_Plot_snowbrush.RDS")
+
+# MODELS ####
+grandfir_pathogen_glm <- 
+  guild_df %>% 
+  dplyr::filter(species == "GrandFir") %>% 
+  mutate(across(c("wilting_scale","bud_number","leaf_number",
+                  "leaf_length","height","shoot_dm","final_root_dm"),
+                scale)) %>% # scale/center all indicators
+  pivot_longer(c("wilting_scale","bud_number","leaf_number",
+                 "leaf_length","height","shoot_dm","final_root_dm"),
+               names_to="indicator") %>% 
+  lmer(data=.,
+       formula=value ~ proportion_pathogen * drought + (1|block))
+summary(grandfir_pathogen_glm)
+saveRDS(grandfir_pathogen_glm,"./Output/ITS_Pathogen_Model_GrandFir.RDS")
+
+snowbrush_pathogen_glm <- 
+  guild_df %>% 
+  dplyr::filter(species == "Snowbrush") %>% 
+  mutate(across(c("wilting_scale","bud_number","leaf_number",
+                  "leaf_length","height","shoot_dm","final_root_dm"),
+                scale)) %>% # scale/center all indicators
+  pivot_longer(c("wilting_scale","bud_number","leaf_number",
+                 "leaf_length","height","shoot_dm","final_root_dm"),
+               names_to="indicator") %>% 
+  lmer(data=.,
+       formula=value ~ proportion_pathogen * drought + (1|block))
+summary(snowbrush_pathogen_glm)
+saveRDS(snowbrush_pathogen_glm,"./Output/16S_Pathogen_Model_Snowbrush.RDS")
+
+
+full_guild_model_df <- 
+  clean_model_df(snowbrush_pathogen_glm) %>% mutate(species="Ceanothus") %>% 
+  full_join(clean_model_df(grandfir_pathogen_glm) %>% mutate(species="Abies")) %>% 
+  dplyr::filter(effect=="fixed") %>% 
+  select(-group)
+
+saveRDS(full_guild_model_df,"./Output/16S_Guild_Model_Output.RDS")
