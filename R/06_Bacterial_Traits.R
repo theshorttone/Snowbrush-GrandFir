@@ -1,5 +1,5 @@
 # -----------------------------------------------------------------------------#
-# Testing trait enrichment between inoculum sources 
+# Pulling and processinf bacterial traits from BacDive database 
 # Author: Geoffrey Zahn
 # Software versions:  R v 4.2.2
 #                     tidyverse v 1.3.2
@@ -21,6 +21,7 @@ library(BacDive); packageVersion("BacDive")
 # Random seed
 set.seed(666)
 
+readRenviron("./.Renviron")
 
 # Data
 bact <- readRDS("./Output/16S_clean_phyloseq_object.RDS")
@@ -29,6 +30,7 @@ bact <- readRDS("./Output/16S_clean_phyloseq_object.RDS")
 # BacDive URL: https://bacdive.dsmz.de/
 bacdive <- BacDive::open_bacdive(username = Sys.getenv("BACDIVE_USER"),
                                  password = Sys.getenv("BACDIVE_PW"))
+
 
 # get list of unique genera
 genus_list <- bact@tax_table[,6] %>% 
@@ -61,7 +63,25 @@ for(i in genus_list){
   }
 }
 
-# save output from previous slow step
+# Find any that didn't work... and re-run (in case of database hang-ups)
+for(i in genus_list[which(!genus_list %in% names(bact_trait_db))]){
+  x <- BacDive::request(object = bacdive,
+                        query = genus_list[i],
+                        search = "taxon")
+  # find bacdive id
+  y <- x$results
+  
+  # if no results found, return NA
+  if(length(y) == 0){
+    bact_trait_db[[i]] <- NA
+  } else {
+    # otherwise, get info on that id
+    z <- BacDive::fetch(bacdive,y)
+    bact_trait_db[[i]] <- z$results  
+  }
+}
+
+# save output from previous slow steps
 saveRDS(bact_trait_db,"./Output/16S_Bacterial_Trait_Database.RDS")
 # reload point, for convenience
 bact_trait_db <- readRDS("./Output/16S_Bacterial_Trait_Database.RDS")
@@ -75,28 +95,67 @@ bact_trait_db$Rhizobium$`132155`$`Physiology and metabolism`
 bact_trait_db$Rhizobium$`132155`$`Physiology and metabolism` %>% 
   str
 
+# 
+# # Best way night be a nested for-loop with lots of tests for missing data :(
+# 
+# genus_physiology <- list()
+# for(genus in names(bact_trait_db)){
+#   
+#   all_strains <- bact_trait_db[[genus]]
+#   
+#   
+#   
+#   for(strain in names(all_strains)){
+#     
+#     strain_x <- all_strains[[strain]]
+#     physiology_x <- strain_x[["Physiology and metabolism"]]
+#     
+#     
+#     
+#     if(length(physiology_x) < 1){
+#       genus_physiology[[genus]] <- NA
+#     }
+#   }  
+# }
+# 
+# 
+# genus_name <- bact_trait_db %>% names
+# 
+# for(i in genus_name[310]){
+#   bact_trait_db %>%
+#     pluck(genus_name[310]) %>% 
+#     # pluck(i) %>% 
+#     names %>% 
+#     # pluck(1) %>% 
+#     # pluck("General") %>%
+#     print()
+# }
+# 
+# 3
+# get names of all the traits
+genus_trait_names <- 
+map(bact_trait_db, function(x){
+  x %>% pluck(1) %>% names
+})
 
-# Best way night be a nested for-loop with lots of tests for missing data :(
 
-genus_physiology <- list()
-for(genus in names(bact_trait_db)){
-  
-  all_strains <- bact_trait_db[[genus]]
-  
-  
-  
-  for(strain in names(all_strains)){
-    
-    strain_x <- all_strains[[strain]]
-    physiology_x <- strain_x[["Physiology and metabolism"]]
-    
-    
-    
-    if(length(physiology_x) < 1){
-      genus_physiology[[genus]] <- NA
-    }
-  }  
+# Pluck keyword lists from each taxon
+genus_general_keywords <- 
+map(bact_trait_db, function(x){
+  x %>% pluck(1) %>% pluck("General") %>% pluck("keywords")
+}) %>% map(unlist)
+
+
+# Search for "pathogen" in any field
+pathogen_list <- c()
+for(i in genus_list){
+  pathogen_list[i] <- 
+  bact_trait_db[[i]] %>% 
+    unlist() %>% 
+    grepl(pattern="pathogen") %>% 
+    any()
 }
+pathogen_list <- pathogen_list %>% which %>% names
 
-bact_trait_db$Rhizobium %>% pluck(1) %>% names
+
 

@@ -1,19 +1,38 @@
-# Fungal traits/guilds
+# -----------------------------------------------------------------------------#
+# Pulling and processinf fungal traits from FungalTraits database 
+# Author: Geoffrey Zahn
+# Software versions:  R v 4.2.2
+#                     tidyverse v 2.0.0
+#                     phyloseq v 1.46.0
+#                     FUNGuildR v 0.2.0.9
+#                     fungaltraits v 0.0.3
+#                     broom v 1.0.5
+#                     lmerTest v 3.1.3
+#                     broom.mixed 0.2.9.4
+# -----------------------------------------------------------------------------#
 
 # SETUP ####
 
-# uncommon specialty package installation
-           # devtools::install_github("brendanf/FUNGuildR")
-           # devtools::install_github("ropenscilabs/datastorr")
-           # devtools::install_github("traitecoevo/fungaltraits")
-
 # load packages
-library(tidyverse)
-library(phyloseq)
-library(FUNGuildR)
-library(fungaltraits)
-library(vegan)
-library(microbiome)
+library(tidyverse); packageVersion("tidyverse")
+library(phyloseq); packageVersion("phyloseq")
+library(FUNGuildR); packageVersion("FUNGuildR")
+library(fungaltraits); packageVersion("fungaltraits")
+library(broom); packageVersion("broom")
+library(lmerTest); packageVersion("lmerTest")
+library(broom.mixed); packageVersion("broom.mixed")
+
+# library(vegan); packageVersion("vegan")
+# library(microbiome); packageVersion("microbiome")
+
+source("./R/palettes.R")
+# functions
+clean_model_df <- function(x){
+  broom.mixed::tidy(x) %>% 
+    mutate(term=term %>% str_remove("indicator")) %>% 
+    mutate(across(where(is.numeric),function(z){round(z,4)}))
+}
+
 
 # load data
 fung <- readRDS("./Output/ITS_clean_phyloseq_object.RDS")
@@ -43,7 +62,6 @@ guild_db <- FUNGuildR::get_funguild_db()
 
 # save guild db as RDS
 saveRDS(guild_db, "./Taxonomy/Funguild_Database.RDS")
-# guild_db <- readRDS("./Taxonomy/Funguild_Database.RDS")
 
 # assign guild to fungal ASV taxonomy
 guilds <- FUNGuildR::funguild_assign(tax_df)
@@ -195,27 +213,53 @@ mutualism_df %>%
 
 # plot (just GrandFir)
 (
-mutualist_plot <- 
+grandfir_mutualist_plot <- 
 guild_df %>% 
   dplyr::filter(species == "GrandFir") %>% 
-    mutate(across(c("wilting_scale","bud_number","leaf_number",
+  mutate(across(c("wilting_scale","bud_number","leaf_number",
                     "leaf_length","height","shoot_dm","final_root_dm"),
                   scale)) %>% # scale/center all indicators
-    pivot_longer(c("wilting_scale","bud_number","leaf_number",
+  pivot_longer(c("wilting_scale","bud_number","leaf_number",
                  "leaf_length","height","shoot_dm","final_root_dm"),
                names_to="indicator") %>% 
-  ggplot(aes(x=proportion_mutualist,y=value)) +
-  geom_point() +
-  geom_smooth(method='lm') +
+  mutate(indicator = indicator %>% str_replace_all("_"," ") %>% str_to_sentence()) %>% 
+  ggplot(aes(x=proportion_mutualist,y=value,color=drought)) +
+  geom_point(alpha=.5) +
+  geom_smooth(method='lm',se=FALSE) +
   facet_wrap(~indicator,scales = 'free') +
   theme_minimal() +
   theme(strip.text = element_text(face="bold",size=12)) +
-  labs(x="Proportion of mutualist fungi",y="Scaled/Centered Value")
+  labs(x="Proportion of mutualist fungi",y="Scaled/Centered Value",color="Drought") +
+  scale_color_manual(values = pal.discrete[c(2,7)])
 )
-saveRDS(mutualist_plot,"./Output/ITS_Mutualist_Plot.RDS")
+saveRDS(grandfir_mutualist_plot,"./Output/figs/ITS_Mutualist_Plot_grandfir.RDS")
+
 
 (
-  saprotroph_plot <- 
+  snowbrush_mutualist_plot <- 
+    guild_df %>% 
+    dplyr::filter(species == "Snowbrush") %>% 
+    mutate(across(c("wilting_scale","bud_number","leaf_number",
+                    "leaf_length","height","shoot_dm","final_root_dm"),
+                  scale)) %>% # scale/center all indicators
+    pivot_longer(c("wilting_scale","bud_number","leaf_number",
+                   "leaf_length","height","shoot_dm","final_root_dm"),
+                 names_to="indicator") %>% 
+    mutate(indicator = indicator %>% str_replace_all("_"," ") %>% str_to_sentence()) %>% 
+    ggplot(aes(x=proportion_mutualist,y=value,color=drought)) +
+    geom_point(alpha=.5) +
+    geom_smooth(method='lm',se=FALSE) +
+    facet_wrap(~indicator,scales = 'free') +
+    theme_minimal() +
+    theme(strip.text = element_text(face="bold",size=12)) +
+    labs(x="Proportion of mutualist fungi",y="Scaled/Centered Value",color="Drought") +
+    scale_color_manual(values = pal.discrete[c(2,7)])
+)
+saveRDS(snowbrush_mutualist_plot,"./Output/figs/ITS_Mutualist_Plot_snowbrush.RDS")
+
+
+(
+  grandfir_saprotroph_plot <- 
     guild_df %>% 
     dplyr::filter(species == "GrandFir") %>% 
     mutate(across(c("wilting_scale","bud_number","leaf_number",
@@ -224,18 +268,43 @@ saveRDS(mutualist_plot,"./Output/ITS_Mutualist_Plot.RDS")
     pivot_longer(c("wilting_scale","bud_number","leaf_number",
                    "leaf_length","height","shoot_dm","final_root_dm"),
                  names_to="indicator") %>% 
-    ggplot(aes(x=proportion_saprotroph,y=value)) +
-    geom_point() +
-    geom_smooth(method='lm') +
+    mutate(indicator = indicator %>% str_replace_all("_"," ") %>% str_to_sentence()) %>% 
+    ggplot(aes(x=proportion_saprotroph,y=value,color=drought)) +
+    geom_point(alpha=.5) +
+    geom_smooth(method='lm',se=FALSE) +
     facet_wrap(~indicator,scales = 'free') +
     theme_minimal() +
     theme(strip.text = element_text(face="bold",size=12)) +
-    labs(x="Proportion of saprotrophic fungi",y="Scaled/Centered Value")
+    labs(x="Proportion of saprotrophic fungi",y="Scaled/Centered Value",color="Drought") +
+    scale_color_manual(values = pal.discrete[c(2,7)])
 )
-saveRDS(saprotroph_plot,"./Output/ITS_Saprotroph_Plot.RDS")
+saveRDS(grandfir_saprotroph_plot,"./Output/figs/ITS_Saprotroph_Plot_grandfir.RDS")
 
 (
-  pathogen_plot <- 
+  snowbrush_saprotroph_plot <- 
+    guild_df %>% 
+    dplyr::filter(species == "Snowbrush") %>% 
+    mutate(across(c("wilting_scale","bud_number","leaf_number",
+                    "leaf_length","height","shoot_dm","final_root_dm"),
+                  scale)) %>% # scale/center all indicators
+    pivot_longer(c("wilting_scale","bud_number","leaf_number",
+                   "leaf_length","height","shoot_dm","final_root_dm"),
+                 names_to="indicator") %>% 
+    mutate(indicator = indicator %>% str_replace_all("_"," ") %>% str_to_sentence()) %>% 
+    ggplot(aes(x=proportion_saprotroph,y=value,color=drought)) +
+    geom_point(alpha=.5) +
+    geom_smooth(method='lm',se=FALSE) +
+    facet_wrap(~indicator,scales = 'free') +
+    theme_minimal() +
+    theme(strip.text = element_text(face="bold",size=12)) +
+    labs(x="Proportion of saprotrophic fungi",y="Scaled/Centered Value",color="Drought") +
+    scale_color_manual(values = pal.discrete[c(2,7)])
+)
+saveRDS(snowbrush_saprotroph_plot,"./Output/figs/ITS_Saprotroph_Plot_snowbrush.RDS")
+
+
+(
+  grandfir_pathogen_plot <- 
     guild_df %>% 
     dplyr::filter(species == "GrandFir") %>% 
     mutate(across(c("wilting_scale","bud_number","leaf_number",
@@ -244,34 +313,73 @@ saveRDS(saprotroph_plot,"./Output/ITS_Saprotroph_Plot.RDS")
     pivot_longer(c("wilting_scale","bud_number","leaf_number",
                    "leaf_length","height","shoot_dm","final_root_dm"),
                  names_to="indicator") %>% 
-    ggplot(aes(x=proportion_pathogen,y=value)) +
-    geom_point() +
-    geom_smooth(method='lm') +
+    mutate(indicator = indicator %>% str_replace_all("_"," ") %>% str_to_sentence()) %>% 
+    ggplot(aes(x=proportion_pathogen,y=value,color=drought)) +
+    geom_point(alpha=.5) +
+    geom_smooth(method='lm',se=FALSE) +
     facet_wrap(~indicator,scales = 'free') +
     theme_minimal() +
     theme(strip.text = element_text(face="bold",size=12)) +
-    labs(x="Proportion of pathogenic fungi",y="Scaled/Centered Value")
+    labs(x="Proportion of pathogenic fungi",y="Scaled/Centered Value",color="Drought") +
+    scale_color_manual(values = pal.discrete[c(2,7)])
 )
-saveRDS(pathogen_plot,"./Output/ITS_Pathogen_Plot.RDS")
+saveRDS(grandfir_pathogen_plot,"./Output/figs/ITS_Pathogen_Plot_grandfir.RDS")
+
+(
+  snowbrush_pathogen_plot <- 
+    guild_df %>% 
+    dplyr::filter(species == "Snowbrush") %>% 
+    mutate(across(c("wilting_scale","bud_number","leaf_number",
+                    "leaf_length","height","shoot_dm","final_root_dm"),
+                  scale)) %>% # scale/center all indicators
+    pivot_longer(c("wilting_scale","bud_number","leaf_number",
+                   "leaf_length","height","shoot_dm","final_root_dm"),
+                 names_to="indicator") %>% 
+    mutate(indicator = indicator %>% str_replace_all("_"," ") %>% str_to_sentence()) %>% 
+    ggplot(aes(x=proportion_pathogen,y=value,color=drought)) +
+    geom_point(alpha=.5) +
+    geom_smooth(method='lm',se=FALSE) +
+    facet_wrap(~indicator,scales = 'free') +
+    theme_minimal() +
+    theme(strip.text = element_text(face="bold",size=12)) +
+    labs(x="Proportion of pathogenic fungi",y="Scaled/Centered Value",color="Drought") +
+    scale_color_manual(values = pal.discrete[c(2,7)])
+)
+saveRDS(snowbrush_pathogen_plot,"./Output/figs/ITS_Pathogen_Plot_snowbrush.RDS")
+
 
 ### Modeling ####
-# model: plant health ~ mutualism_% + block + (1|block)
 
-mutualism_glm <- 
+# model: plant health ~ mutualism_% * drought + (1|block)
+mutualism_glm_grandfir <- 
+  guild_df %>% 
+  dplyr::filter(species == "GrandFir") %>% 
+  mutate(across(c("wilting_scale","bud_number","leaf_number",
+                  "leaf_length","height","shoot_dm","final_root_dm"),
+                scale)) %>% # scale/center all indicators
+  pivot_longer(c("wilting_scale","bud_number","leaf_number",
+                 "leaf_length","height","shoot_dm","final_root_dm"),
+               names_to="indicator") %>% 
+  lmer(data=.,
+      formula=value ~ proportion_mutualist * drought + (1|block))
+summary(mutualism_glm_grandfir)
+saveRDS(mutualism_glm_grandfir,"./Output/figs/ITS_Mutualist_Model_GrandFir.RDS")
+
+mutualism_glm_snowbrush <- 
 guild_df %>% 
-  dplyr::filter(species == "GrandFir") %>% 
+  dplyr::filter(species == "Snowbrush") %>% 
   mutate(across(c("wilting_scale","bud_number","leaf_number",
                   "leaf_length","height","shoot_dm","final_root_dm"),
                 scale)) %>% # scale/center all indicators
   pivot_longer(c("wilting_scale","bud_number","leaf_number",
                  "leaf_length","height","shoot_dm","final_root_dm"),
                names_to="indicator") %>% 
-  glm(data=.,
-      formula=value ~ proportion_mutualist + proportion_mutualist:indicator)
-summary(mutualism_glm)
-saveRDS(mutualism_glm,"./Output/ITS_Mutualist_Model.RDS")
+  lmer(data=.,
+       formula=value ~ proportion_mutualist * drought + (1|block))
+summary(mutualism_glm_snowbrush)
+saveRDS(mutualism_glm_snowbrush,"./Output/ITS_Mutualist_Model_Snowbrush.RDS")
 
-saprotroph_glm <- 
+grandfir_pathogen_glm <- 
   guild_df %>% 
   dplyr::filter(species == "GrandFir") %>% 
   mutate(across(c("wilting_scale","bud_number","leaf_number",
@@ -280,106 +388,119 @@ saprotroph_glm <-
   pivot_longer(c("wilting_scale","bud_number","leaf_number",
                  "leaf_length","height","shoot_dm","final_root_dm"),
                names_to="indicator") %>% 
-  glm(data=.,
-      formula=value ~ proportion_saprotroph + proportion_saprotroph:indicator)
-summary(saprotroph_glm)
-saveRDS(saprotroph_glm,"./Output/ITS_Saprotroph_Model.RDS")
+  lmer(data=.,
+       formula=value ~ proportion_pathogen * drought + (1|block))
+summary(grandfir_pathogen_glm)
+saveRDS(grandfir_pathogen_glm,"./Output/ITS_Pathogen_Model_GrandFir.RDS")
 
-pathogen_glm <- 
+snowbrush_pathogen_glm <- 
   guild_df %>% 
-  dplyr::filter(species == "GrandFir") %>% 
+  dplyr::filter(species == "Snowbrush") %>% 
   mutate(across(c("wilting_scale","bud_number","leaf_number",
                   "leaf_length","height","shoot_dm","final_root_dm"),
                 scale)) %>% # scale/center all indicators
   pivot_longer(c("wilting_scale","bud_number","leaf_number",
                  "leaf_length","height","shoot_dm","final_root_dm"),
                names_to="indicator") %>% 
-  glm(data=.,
-      formula=value ~ proportion_pathogen + proportion_pathogen:indicator)
-summary(pathogen_glm)
-saveRDS(pathogen_glm,"./Output/ITS_Pathogen_Model.RDS")
+  lmer(data=.,
+       formula=value ~ proportion_pathogen * drought + (1|block))
+summary(snowbrush_pathogen_glm)
+saveRDS(snowbrush_pathogen_glm,"./Output/ITS_Pathogen_Model_Snowbrush.RDS")
+
+# pull together all model outputs from guild predictions on plant traits
+full_guild_model_df <- 
+clean_model_df(snowbrush_pathogen_glm) %>% mutate(species="Ceanothus") %>% 
+  full_join(clean_model_df(grandfir_pathogen_glm) %>% mutate(species="Abies")) %>% 
+  full_join(
+    clean_model_df(mutualism_glm_snowbrush) %>% mutate(species="Ceanothus") %>% 
+      full_join(clean_model_df(mutualism_glm_grandfir) %>% mutate(species="Abies"))
+  ) %>% 
+  dplyr::filter(effect=="fixed") %>% 
+  select(-group)
+
+saveRDS(full_guild_model_df,"./Output/ITS_Guild_Model_Output.RDS")
 
 ## Functional diversity and plant health ####
-
+# I don't trust this...
 # H3: Functional diversity: Seedling performance will be enhanced in root microbiomes 
 # comprised of taxa that represent high functional diversity
-
-# calculate "functional diversity" into a single number for each taxon
-x <- 
-traits %>% 
-  dplyr::select(-c(Genus,species)) %>% 
-  mutate(across(everything(),abs)) # transform negative values
-
-# convert NaN to 0 for diversity estimates
-for(i in names(x)){
-  pluck(x,i)[is.nan(pluck(x,i))] <- 0
-}
-# functional diversity, measured as number of annotated functional potentials
-# This is pretty sparse due to database lacking good info on lots of taxa
-functional_div1 <- 
-  x %>% 
-  as.matrix() %>% 
-  vegan::specnumber()
-
-# Within each sample...
-# Each taxon relative abundance should be multiplied by that taxon's functional div #
-
-scaled_func_div <- c()
-for(sampleid in sample_names(fung_ra)){
-  
-  single_sample <- # pull each sample, one at a time   
-    fung_ra %>% 
-    subset_samples(sample_names(fung_ra) == sampleid) 
-  single_sample <- # find present taxa
-    single_sample %>% 
-    subset_taxa(taxa_sums(single_sample) > 0)
-  present_taxa <- which(taxa_names(fung_ra) %in% taxa_names(single_sample)) # use their names
-  scaled_func_div[sampleid] <- sum(functional_div1[present_taxa] * taxa_sums(single_sample))
-  # ^ sumof: relative abundance * functional diversity score for that taxon
-}  
-
-
-# add to sample data frame
-functional_df <- 
-  microbiome::meta(fung_ra) %>% 
-  mutate(scaled_func_div=scaled_func_div)
-
-# plot (just GrandFir)
-(
-  functional_plot <- 
-    functional_df %>% 
-    dplyr::filter(species == "GrandFir") %>% 
-    mutate(across(c("wilting_scale","bud_number","leaf_number",
-                    "leaf_length","height","shoot_dm","final_root_dm"),
-                  scale)) %>% # scale/center all indicators
-    pivot_longer(c("wilting_scale","bud_number","leaf_number",
-                   "leaf_length","height","shoot_dm","final_root_dm"),
-                 names_to="indicator") %>% 
-    ggplot(aes(x=scaled_func_div,y=value)) +
-    geom_point() +
-    geom_smooth(method='lm') +
-    facet_wrap(~indicator,scales = 'free') +
-    theme_minimal() +
-    theme(strip.text = element_text(face="bold",size=12)) +
-    labs(x="Scaled functional diversity",y="Scaled/Centered Value")
-)
-saveRDS(functional_plot,"./Output/ITS_Functional_Plot.RDS")
-
-
-### Modeling ####
-# model: plant health ~ mutualism_% + block + (1|block)
-
-functional_glm <- 
-  functional_df %>% 
-  dplyr::filter(species == "GrandFir") %>% 
-  mutate(across(c("wilting_scale","bud_number","leaf_number",
-                  "leaf_length","height","shoot_dm","final_root_dm"),
-                scale)) %>% # scale/center all indicators
-  pivot_longer(c("wilting_scale","bud_number","leaf_number",
-                 "leaf_length","height","shoot_dm","final_root_dm"),
-               names_to="indicator") %>% 
-  glm(data=.,
-      formula=value ~ scaled_func_div + scaled_func_div:indicator)
-summary(functional_glm)
-saveRDS(functional_glm,"./Output/ITS_Functional_Model.RDS")
-
+# 
+# # calculate "functional diversity" into a single number for each taxon
+# x <- 
+# traits %>% 
+#   dplyr::select(-c(Genus,species)) %>% 
+#   mutate(across(everything(),abs)) # transform negative values
+# 
+# # convert NaN to 0 for diversity estimates
+# for(i in names(x)){
+#   pluck(x,i)[is.nan(pluck(x,i))] <- 0
+# }
+# # functional diversity, measured as number of annotated functional potentials
+# # This is pretty sparse due to database lacking good info on lots of taxa
+# functional_div1 <- 
+#   x %>% 
+#   as.matrix() %>% 
+#   vegan::specnumber()
+# 
+# # Within each sample...
+# # Each taxon relative abundance should be multiplied by that taxon's functional div #
+# 
+# scaled_func_div <- c()
+# for(sampleid in sample_names(fung_ra)){
+#   
+#   single_sample <- # pull each sample, one at a time   
+#     fung_ra %>% 
+#     subset_samples(sample_names(fung_ra) == sampleid) 
+#   single_sample <- # find present taxa
+#     single_sample %>% 
+#     subset_taxa(taxa_sums(single_sample) > 0)
+#   present_taxa <- which(taxa_names(fung_ra) %in% taxa_names(single_sample)) # use their names
+#   scaled_func_div[sampleid] <- sum(functional_div1[present_taxa] * taxa_sums(single_sample))
+#   # ^ sumof: relative abundance * functional diversity score for that taxon
+# }  
+# 
+# 
+# # add to sample data frame
+# functional_df <- 
+#   microbiome::meta(fung_ra) %>% 
+#   mutate(scaled_func_div=scaled_func_div)
+# 
+# # plot (just GrandFir)
+# (
+#   functional_plot <- 
+#     functional_df %>% 
+#     dplyr::filter(species == "GrandFir") %>% 
+#     mutate(across(c("wilting_scale","bud_number","leaf_number",
+#                     "leaf_length","height","shoot_dm","final_root_dm"),
+#                   scale)) %>% # scale/center all indicators
+#     pivot_longer(c("wilting_scale","bud_number","leaf_number",
+#                    "leaf_length","height","shoot_dm","final_root_dm"),
+#                  names_to="indicator") %>% 
+#     ggplot(aes(x=scaled_func_div,y=value)) +
+#     geom_point() +
+#     geom_smooth(method='lm') +
+#     facet_wrap(~indicator,scales = 'free') +
+#     theme_minimal() +
+#     theme(strip.text = element_text(face="bold",size=12)) +
+#     labs(x="Scaled functional diversity",y="Scaled/Centered Value")
+# )
+# saveRDS(functional_plot,"./Output/ITS_Functional_Plot.RDS")
+# 
+# 
+# ### Modeling ####
+# # model: plant health ~ mutualism_% + block + (1|block)
+# 
+# functional_glm <- 
+#   functional_df %>% 
+#   dplyr::filter(species == "GrandFir") %>% 
+#   mutate(across(c("wilting_scale","bud_number","leaf_number",
+#                   "leaf_length","height","shoot_dm","final_root_dm"),
+#                 scale)) %>% # scale/center all indicators
+#   pivot_longer(c("wilting_scale","bud_number","leaf_number",
+#                  "leaf_length","height","shoot_dm","final_root_dm"),
+#                names_to="indicator") %>% 
+#   glm(data=.,
+#       formula=value ~ scaled_func_div + scaled_func_div:indicator)
+# summary(functional_glm)
+# saveRDS(functional_glm,"./Output/ITS_Functional_Model.RDS")
+# 
