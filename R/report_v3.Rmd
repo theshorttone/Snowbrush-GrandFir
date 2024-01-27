@@ -10,7 +10,10 @@ library(tidyverse)
 library(knitr)
 library(patchwork)
 library(kableExtra)
-setwd("../R/")
+library(phyloseq)
+library(zahntools)
+# setwd("../R/")
+theme_set(theme_minimal())
 ```
 
 
@@ -18,81 +21,198 @@ setwd("../R/")
 
 **Contaminant ASVs were identified with the prevalence method using the *decontam* package.**
 
-The only taxa identified as contaminant sources in the negative controls were several species of *Puccinia*, *Sebacina*, and *Glonium*. These ASVs were removed from analyses.
+# **Plant measures overview**
 
-<br>
+**Scaled-centered plant 'health' measures, broken down by treatment factors.**
 
-___
+```{r, fig.width=10, fig.height=6}
+p <- readRDS("../Output/figs/Plant_Health_Measures_Plot.RDS")
 
-<br>
-
-# **Alpha-diversity exploration**
-
-Here's a quick glance at alpha diversity for both bacterial and fungal ASVs, grouped by inoculum source:
-
-## Bacteria
-```{r}
-# knitr::include_graphics("../Output/16S_inoc_source_and_alpha-div.png")
-# do grandfir and snowbrush
 ```
 
-**ANOVA and Tukey Test indicated no significant difference in any of the alpha diversity metrics for bacteria.**
 
-## Fungi
+**Model output**
+
+
+Formula: `value ~ drought * host * fire_freq + (1|inoculum_site/block))`
 ```{r}
-# knitr::include_graphics("../Output/ITS_inoc_source_and_alpha-div.png")
-```
 
-**ANOVA and Tukey Test indicate that samples inoculated from "Inoculum Site 4" had several significant differences in fungal alpha diversity.** Here are the pairings that were significantly different (along with the direction of the difference).
-
-```{r}
-# knitr::include_graphics("../Output/figs/ITS_Simpson_Div_Difference_Between_Inoc_Source.png")
+df <- readRDS("../Output/Plant_Health_Measures_Overview_Model_table.RDS")
+df %>% 
+  mutate(across(where(is.numeric),function(x){round(x,3)})) %>% 
+  filter(effect == "fixed") %>% select(-group) %>% 
+  kable() %>% 
+  kable_classic(lightable_options = 'hover')
 ```
 
 
 
+
+<br>
+
+___
+
+
+<br>
+
+# **Inoculum communities overview**
+
+## **Taxonomic overview**
+
+### **Bacteria**
+
+```{r}
+site1.inoc.full <- readRDS("../Output/phyloseq_objects/16S_site1.inoc.RDS")
+site2.inoc.full <- readRDS("../Output/phyloseq_objects/16S_site2.inoc.RDS")
+site3.inoc.full <- readRDS("../Output/phyloseq_objects/16S_site3.inoc.RDS")
+site4.inoc.full <- readRDS("../Output/phyloseq_objects/16S_site4.inoc.RDS")
+site5.inoc.full <- readRDS("../Output/phyloseq_objects/16S_site5.inoc.RDS")
+site6.inoc.full <- readRDS("../Output/phyloseq_objects/16S_site6.inoc.RDS")
+
+
+site1.inoc.full@phy_tree <- NULL
+site2.inoc.full@phy_tree <- NULL
+site3.inoc.full@phy_tree <- NULL
+site4.inoc.full@phy_tree <- NULL
+site5.inoc.full@phy_tree <- NULL
+site6.inoc.full@phy_tree <- NULL
+
+bact_inoc <- merge_phyloseq(site1.inoc.full,site2.inoc.full,site3.inoc.full,site4.inoc.full,site5.inoc.full,site6.inoc.full)
+bact_inoc <- bact_inoc %>% 
+  subset_samples(!is.na("other_frompreviouscolumn"))
+bact_inoc %>% 
+  subset_taxa(taxa_sums(bact_inoc) > 0) %>% 
+  merge_samples("other_frompreviouscolumn") %>% 
+  transform_sample_counts(function(x){x/sum(x)}) %>% 
+  plot_bar2(fill="Phylum") +
+  scale_fill_viridis_d()
+
+```
+
+**Alpha diversity**
+
+Effect of Shannon diversity on plant measures
+
+```{r}
+include_graphics("../Output/figs/16S_Shannon_vs_plant_site.png")
+
+readRDS("../Output/16S_alpha_diversity_lmermod_table.RDS") %>% 
+  mutate(across(where(is.numeric),function(x){round(x,3)})) %>% 
+  kable() %>% kable_classic(lightable_options = 'hover')
+```
+
+
+### **Fungi**
+
+```{r}
+site1.inoc.full <- readRDS("../Output/phyloseq_objects/ITS_site1.inoc.RDS")
+site2.inoc.full <- readRDS("../Output/phyloseq_objects/ITS_site2.inoc.RDS")
+site3.inoc.full <- readRDS("../Output/phyloseq_objects/ITS_site3.inoc.RDS")
+site4.inoc.full <- readRDS("../Output/phyloseq_objects/ITS_site4.inoc.RDS")
+site5.inoc.full <- readRDS("../Output/phyloseq_objects/ITS_site5.inoc.RDS")
+site6.inoc.full <- readRDS("../Output/phyloseq_objects/ITS_site6.inoc.RDS")
+
+bact_inoc <- merge_phyloseq(site1.inoc.full,site2.inoc.full,site3.inoc.full,site4.inoc.full,site5.inoc.full,site6.inoc.full)
+bact_inoc <- bact_inoc %>% 
+  subset_samples(!is.na("other_frompreviouscolumn"))
+bact_inoc %>% 
+  subset_taxa(taxa_sums(bact_inoc) > 0) %>% 
+  merge_samples("other_frompreviouscolumn") %>% 
+  transform_sample_counts(function(x){x/sum(x)}) %>% 
+  plot_bar2(fill="Phylum") +
+  scale_fill_viridis_d()
+
+
+```
+
+**Alpha diversity**
+
+Effect of Shannon diversity on plant measures
+
+```{r}
+include_graphics("../Output/figs/16S_Shannon_vs_plant_site.png")
+
+readRDS("../Output/16S_alpha_diversity_lmermod_table.RDS") %>% 
+  mutate(across(where(is.numeric),function(x){round(x,3)})) %>% 
+  kable() %>% kable_classic(lightable_options = 'hover')
+```
+
+
+## **Comparison between inoculum and root communities**
+
+### **Bacteria**
+
+```{r}
+p1 <- readRDS("../Output/figs/16S_inoc_plot_1.RDS") + labs(title = "Inoculum 1")
+p2 <- readRDS("../Output/figs/16S_inoc_plot_2.RDS") + labs(title = "Inoculum 2")
+p3 <- readRDS("../Output/figs/16S_inoc_plot_3.RDS") + labs(title = "Inoculum 3")
+p4 <- readRDS("../Output/figs/16S_inoc_plot_4.RDS") + labs(title = "Inoculum 4")
+p5 <- readRDS("../Output/figs/16S_inoc_plot_5.RDS") + labs(title = "Inoculum 5")
+p6 <- readRDS("../Output/figs/16S_inoc_plot_6.RDS") + labs(title = "Inoculum 6")
+
+(p1 + p2 + p3) / (p4 + p5 + p6) + patchwork::plot_layout(guides='collect')
+```
+
+**Not all taxa in the inoculae were subsequently found in the root samples**
+
+```{r}
+include_graphics("../Output/figs/16S_successful_vs_unsuccessful_taxa_breakdown.png")
+
+```
+
+
+
+
+### **Fungi**
+
+```{r}
+p1 <- readRDS("../Output/figs/ITS_inoc_plot_1.RDS") + labs(title = "Inoculum 1")
+p2 <- readRDS("../Output/figs/ITS_inoc_plot_2.RDS") + labs(title = "Inoculum 2")
+p3 <- readRDS("../Output/figs/ITS_inoc_plot_3.RDS") + labs(title = "Inoculum 3")
+p4 <- readRDS("../Output/figs/ITS_inoc_plot_4.RDS") + labs(title = "Inoculum 4")
+p5 <- readRDS("../Output/figs/ITS_inoc_plot_5.RDS") + labs(title = "Inoculum 5")
+p6 <- readRDS("../Output/figs/ITS_inoc_plot_6.RDS") + labs(title = "Inoculum 6")
+
+(p1 + p2 + p3) / (p4 + p5 + p6) + patchwork::plot_layout(guides='collect')
+```
+
+```{r}
+include_graphics("../Output/figs/ITS_successful_vs_unsuccessful_taxa_breakdown.png")
+```
+
+
 <br>
 
 ___
 
 <br>
 
-# **Aim 1:** 
-
-Determine the ecological, phylogenetic, and network properties of root microbiomes that promote seedling performance
-
-*How do we define the concept of 'promotes seedling performance?'*
-
-  - Leaf number
-  - Leaf length
-  - Wilting scale
-  - Bud number
-  - Shoot/root dry mass
-  - Plant height
-
-___
-
-## **Hypotheses**
-
-  - **H1:** Guild abundance hypothesis: Seedling performance will be enhanced when root microbiomes have a greater proportion of microbial mutualists (e.g., ectomycorrhizal fungi) relative to saprotrophs, endophytes, or pathogens
-  - **H2:** Microbial trait hypothesis: Seedling performance will be enhanced in root microbiomes that are enriched in taxa that confer tolerance to stress (e.g., Dove et al. 2022)
-  - **H3:** Functional diversity: Seedling performance will be enhanced in root microbiomes comprised of taxa that represent high functional diversity
-  - **H4:** Network connectivity: Seedling performance will be enhanced when root microbiomes contain taxa with high co-occurrence network connectivity
 
 <br>
 
-___
+# **Microbial guilds**
 
-<br>
+## **Bacteria**
 
-## **Ecological properties**
+I couldn't get a trustworthy annotation of "mutualists" for bacteria, but here are probable pathogens:
 
-### Bacteria (16S | V6-V8)
+```{r mutualistplots, fig.width=8,fig.height=5}
+p1 <- readRDS("../Output/figs/16S_Pathogen_Plot_grandfir.RDS") + ggtitle("Grand fir")
+p2 <- readRDS("../Output/figs/16S_Pathogen_Plot_snowbrush.RDS") + ggtitle("Snowbrush")
+p1
+p2
 
-  - Trait analysis (BacDive Database analysis slowly ongoing)
+```
   
+```{r}
+readRDS("../Output/16S_Guild_Model_Output.RDS") %>% 
+  # arrange(species) %>% 
+  kable %>% 
+  kable_classic(lightable_options = 'hover')
+```
 
-### Fungi (ITS2)
+
+## **Fungi**
 
 How does the proportion of mutualist fungi relate to indicators of plant health?
 
@@ -110,12 +230,12 @@ p2 + ggtitle("Snowbrush")
 
 
 
-**We see an opposite pattern when looking at the proportions of putatively saprotrophic and pathogenic fungi**
+**We see an opposite pattern when looking at the proportions of putatively pathogenic fungi**
 
 
 ```{r pathogenplots, fig.width=8,fig.height=5}
 p1 <- readRDS("../Output/figs/ITS_Pathogen_Plot_grandfir.RDS")
-p2 <- readRDS("../Output/figs/ITS_Saprotroph_Plot_snowbrush.RDS")
+p2 <- readRDS("../Output/figs/ITS_Pathogen_Plot_snowbrush.RDS")
 p1 + ggtitle("Grand Fir") 
 p2 + ggtitle("Snowbrush")
 
@@ -130,27 +250,137 @@ readRDS("../Output/ITS_Guild_Model_Output.RDS") %>%
 ```
 
 
+<br>
+
 ___
 
 <br>
-_____
+
+
+# **Beta-Diversity**
+
+## **Bacteria**
+
+
+```{r}
+readRDS("../Output/figs/16S_Ordination_Plots_Host.RDS")
+readRDS("../Output/figs/16S_Ordination_Plots_Drought.RDS")
+readRDS("../Output/figs/16S_Ordination_Plots_Site.RDS")
+readRDS("../Output/16S_Permanova_Table.RDS") %>% 
+  kable() %>% kable_classic(lightable_options = 'hover')
+```
+
+
+
+## **Fungi**
+
+```{r}
+readRDS("../Output/figs/ITS_Ordination_Plots_Host.RDS")
+readRDS("../Output/figs/ITS_Ordination_Plots_Drought.RDS")
+readRDS("../Output/figs/ITS_Ordination_Plots_Site.RDS")
+readRDS("../Output/ITS_Permanova_Table.RDS") %>% 
+  kable() %>% kable_classic(lightable_options = 'hover')
+```
+
+
+<br>
+
+___
 
 <br>
 
 
 
-## **Phylogenetic properties**
+# **Important Taxa**
 
-### Bacteria (16S | V6-V8)
+**These taxa were identified by both Random Forest models and _corncob_ as being important predictors of the various experimental conditions & had significant differential abundance between levels of those variables**
 
-  - Phylogenetic dispersion
-  - 
+## **Bacteria**
 
-### Fungi (ITS2)
+
+### **Differential Abundance**
+```{r}
+include_graphics("../Output/figs/16S_DiffAbund_Overview_host.png")
+include_graphics("../Output/figs/16S_DiffAbund_Overview_fire.png")
+include_graphics("../Output/figs/16S_DiffAbund_Overview_drought.png")
+
+```
+
+### **Relative Abundances in root samples**
+
+```{r, fig.width=12,fig.height=8}
+readRDS("../Output/figs/16S_Important_Taxa_Abundances_host.RDS")
+readRDS("../Output/figs/16S_Important_Taxa_Abundances_host.RDS")
+readRDS("../Output/figs/16S_Important_Taxa_Abundances_host.RDS")
+
+
+```
+
+
+## **Fungi**
+
+
+
+### **Differential Abundance**
+
+```{r}
+include_graphics("../Output/figs/ITS_DiffAbund_Overview_host.png")
+include_graphics("../Output/figs/ITS_DiffAbund_Overview_fire.png")
+include_graphics("../Output/figs/ITS_DiffAbund_Overview_drought.png")
+```
+
+
+### **Relative Abundances in root samples**
+
+```{r, fig.width=12,fig.height=8}
+readRDS("../Output/figs/16S_Important_Taxa_Abundances_host.RDS")
+readRDS("../Output/figs/16S_Important_Taxa_Abundances_host.RDS")
+readRDS("../Output/figs/16S_Important_Taxa_Abundances_host.RDS")
+
+
+```
+
+
+<br>
+
+___
+
+<br>
+
+
+# **Phylogenetic properties**
+
+## **Bacteria**
+
+  - Still kind of messy
+  - What specific questions do we need to address with this?
+ 
+## **Fungi**
 
   - Phylogenetic dispersion is tricky with ITS markers :(
-  - 
-  
+  - Could try GhostTree for fungi of interest that come up as 'unknown'
+
+<br>
+
+_____
+
+<br>
+
+
+
+
+
+
+# **Network properties**
+
+**Do we want to get into this in this paper?**
+
+## **Bacteria**
+
+## **Fungi**
+
+## **Cross-Domain** 
+
 
 <br>
 _____
@@ -158,326 +388,13 @@ _____
 <br>
 
 
-## **Network properties**
 
-### Bacteria (16S | V6-V8)
 
-```{r, fig.width=8,fig.height=5}
-knitr::include_graphics("../Output/figs/16S_networks_by_inoculum_source.png")
-```
 
-Bacterial network properties do not really vary much between samples that had different inoculum sources.
 
-```{r, fig.width=8,fig.height=5}
-P <- readRDS("../Output/figs/bacterial_network_connectivity.RDS")
-P
-```
 
-___
 
-### Fungi (ITS2)
-
-```{r, fig.width=8,fig.height=5}
-knitr::include_graphics("../Output/figs/ITS_networks_by_inoculum_source.png")
-```
-
-In general, the fungal networks were much less connected than bacterial networks, but connectivity varied widely between samples treated with different inoculum sources. 
-
-```{r, fig.width=8,fig.height=5}
-p <- readRDS("../Output/figs/fungal_network_connectivity.RDS")
-p
-```
-
-Samples inoculated from sites 1 and 4 have significantly stronger co-ocurrence networks.
-  
-___
-
-### Cross-Domain 
-
-
-```{r, fig.width=8,fig.height=5}
-knitr::include_graphics("../Output/figs/crossdomain_networks_by_inoculum_source.png")
-```
-  
-**In cross-domain networks, samples inoculated from inoculum source 3, display significantly more connectivity.**
-  
-<br>
-_____
-
-<br>
-
-
-# **Aim 2:**
-
-**Determine how microbial transplants impact root microbiome community development and seedling performance in post-wildfire soils** (Questions in red not addressed here...yet)
-
-
-
-  - **Inocula source:** How does source of inocula impact root microbiome community development and seedling performance in post-wildfire soil?
-  - <span style="color: red;">**Priority effects:** How do priority effects impact the development of the root microbiome and conifer seedling performance in post-wildfire soils?</span>
-  - **Resident soil biota:** How does the resident soil microbial community modulate the impact of the donor microbial community on the root and rhizosphere microbiome and on plant performance?
-  - **Environmental conditions:** How do soil properties (e.g., nutrient availability, moisture, pH, texture) modulate the impacts of the soil microbiome on plant performance in post wildfire soils?
-
-
-## **Inoculum impact on microbial community**
-
-
-### Bacteria (16S | V6-V8)
-
-Inoculum source 'burn frequency' is nested within inoculum 'site.' 
-
-```{r}
-readRDS("../Output/16S_inoculum_nestedness.RDS") %>% kable() %>% kable_classic(lightable_options = 'hover') %>% kableExtra::add_footnote("rows are burn freq., cols are sites, indicating sample counts in each combination")
-  
-```
-
-
-But here are NMDS ordinations of bacterial community, colored by inoculum properties:
-
-
-```{r fig.align='center'}
-p1 <- readRDS("../Output/16S_Ordination_by_inoculum_source.RDS") + labs(color="Inoculum\nsite")
-p2 <- readRDS("../Output/16S_Ordination_by_inoculum_burnfreq.RDS")
-
-p1 + p2
-
-```
-
-PermANOVA with formula Community ~ inoculum site * inoculum burnfreq:
-
-```{r}
-readRDS("../Output/16S_PermANOVA_inoculum_source.RDS") %>% 
-  mutate(term = term %>% str_remove("ps\\@sam_data\\$")) %>% 
-  kable() %>% kable_classic(lightable_options = 'hover') %>% 
-  add_footnote("Inoculum source explains ~ 30% of bacterial community structure")
-```
-
-___
-
-Same ordination, but with soil variables overlaid:
-
-```{r}
-p <- readRDS("../Output/figs/envfit_plot_16S.RDS")
-p
-```
-
-___
-
-A Heatmap of bacterial ASVs with at least 10% total relative abundance (across all samples), split by inoculum source:
-
-```{r}
-readRDS("../Output/16S_heatmap_mostabund.RDS")
-```
-
-<br>
-_____
-
-<br>
-
-
-### Fungi (ITS2)
-
-
-```{r fig.align='center'}
-p1 <- readRDS("../Output/ITS_Ordination_by_inoculum_source.RDS") + labs(color="Inoculum\nsite")
-p2 <- readRDS("../Output/ITS_Ordination_by_inoculum_burnfreq.RDS")
-
-p1 + p2
-
-```
-
-PermANOVA with formula Community ~ inoculum site * inoculum burnfreq:
-
-```{r}
-readRDS("../Output/ITS_PermANOVA_inoculum_source.RDS") %>% 
-  mutate(term = term %>% str_remove("ps\\@sam_data\\$")) %>% 
-  kable() %>% kable_classic(lightable_options = 'hover') %>% 
-  add_footnote("Inoculum source explains ~ 26% of fungal community structure")
-```
-
-___
-
-Same ordination, but with soil variables overlaid:
-
-```{r}
-p <- readRDS("../Output/figs/envfit_plot_ITS.RDS")
-p
-```
-___
-
-A Heatmap of Fungal ASVs with at least 10% total relative abundance (across all samples), split by inoculum source:
-
-```{r}
-readRDS("../Output/ITS_heatmap_mostabund.RDS")
-```
-
-
-<br>
-_____
-
-<br>
-
-## **Inoculum impact on seedling performance**
-
-
-### Bacteria (16S | V6-V8)
-
-How were various plant traits affected by inoculum source?
-
-(model outputs below - These are the same for fungi, since the predictor was simply inoculum source, not the actual community)
-
-```{r}
-df <- readRDS("../Output/alpha_df.RDS")
-df %>% 
-  pivot_longer(c(shoot_dm,final_root_dm,height,leaf_number),
-               names_to = "phenotype", values_to = "value") %>% 
-  ggplot(aes(x=inoculum_site,y=value)) +
-  geom_boxplot(fill="green") +
-  facet_wrap(~phenotype,scales = 'free') +
-  theme_minimal() + theme(strip.text = element_text(face='bold',size=12)) +
-  labs(x="Inoculum site",y="Observed phenotype value")
-  
-
-```
-
-
-
-**Effect of inoculum source on leaf number:**
-
-```{r}
-mod <- readRDS("../Output/16S_inoc_leafnumber_mod.RDS")
-broom::tidy(mod) %>% 
-  kable() %>% kable_classic(lightable_options = 'hover')
-
-```
-
-**Effect of inoculum source on plant height:**
-
-```{r}
-mod <- readRDS("../Output/16S_inoc_height_mod.RDS")
-broom::tidy(mod) %>% 
-  kable() %>% kable_classic(lightable_options = 'hover')
-
-```
-
-**Effect of inoculum source on shoot mass:**
-
-```{r}
-mod <- readRDS("../Output/16S_inoc_shootdm_mod.RDS")
-broom::tidy(mod) %>% 
-  kable() %>% kable_classic(lightable_options = 'hover')
-
-```
-
-**Effect of inoculum source on root mass:**
-
-```{r}
-mod <- readRDS("../Output/16S_inoc_rootdm_mod.RDS")
-broom::tidy(mod) %>% 
-  kable() %>% kable_classic(lightable_options = 'hover')
-
-```
-
-**Is there something special about inoculum site 4?**
-
-Plants that received inoculum from site 4 had significantly stronger indicators of 'plant health.'
-
-Site 3 (which presumably had the same burn frequency as site 4), had significantly worse plant outcomes.
-
-A random forest model, using bacterial community found that increased relative abundance of the following taxa were significantly predictive of site 4:
-
-
-```{r}
-include_graphics("../Output/RF_mod_VIP_site4.png")
-```
-
-This effect of "Site 4" was most pronounced on **Leaf Number.** Looking directly at that, a similar random forest model can be used to see what taxa specifically are associated with increased leaf number, regardless of inoculum source.
-
-```{r}
-include_graphics("../Output/RF_mod_VIP_leaf_count.png")
-```
-
-**Again, we see *Rhizobium* taxa, but also note that *Phenylobacterium* turns up as an important player.**
-
-<br>
-_____
-
-<br>
-
-A differential abundance analysis at the genus level shows other bacterial taxa which have significant deviations from the "Sterile Inoculum" samples.
-
-```{r fig.width=12}
-x <- readRDS("../Output/16S_diffabund_inocsite.RDS")
-# x$data$taxa <- # tidy taxa names
-#   paste(x$data$taxa %>% str_remove_all("_incertae_sedis") %>% str_split("_") %>% map_chr(4),
-#        x$data$taxa %>% str_remove_all("_incertae_sedis") %>% str_split("_") %>% map_chr(5),
-#        x$data$taxa %>% str_remove_all("_incertae_sedis") %>% str_split("_") %>% map_chr(6),
-#       sep=" ")
-x$data$variable <- x$data$variable %>% 
-  str_remove("\nDifferential Abundance") %>%
-  str_replace("inoculum_site","site ")
-x
-```
-
-___
-
-We can look closer at significant taxa of interest such as *Rhizobium* and *Phenylobacterium* which turned up as important in the random forest models:
-
-```{r}
-p1 <- readRDS("../Output/16S_bbdml_plot_1.RDS") + theme(legend.position = 'none')
-p2 <- readRDS("../Output/16S_bbdml_plot_2.RDS") + theme(legend.position = 'bottom') + labs(color="Inoculum source")
-p1 / p2
-```
-
-<br>
-
-___
-
-<br>
-
-
-### Fungi (ITS2)
-
-
-```{r}
-include_graphics("../Output/ITS_RF_mod_VIP_site4.png")
-```
-
-This effect of "Site 4" was most pronounced on **Leaf Number.** Looking directly at that, a similar random forest model can be used to see what taxa specifically are associated with increased leaf number, regardless of inoculum source.
-
-```{r}
-include_graphics("../Output/ITS_RF_mod_VIP_leaf_count.png")
-```
-
-
-<br>
-_____
-
-<br>
-
-A differential abundance analysis at the genus level shows other fungal taxa which have significant deviations from the "Sterile Inoculum" samples.
-
-```{r fig.width=12}
-x <- readRDS("../Output/ITS_diffabund_inocsite.RDS")
-# x$data$taxa <- # tidy taxa names
-#   paste(x$data$taxa %>% str_remove_all("_incertae_sedis") %>% str_split("_") %>% map_chr(4),
-#        x$data$taxa %>% str_remove_all("_incertae_sedis") %>% str_split("_") %>% map_chr(5),
-#        x$data$taxa %>% str_remove_all("_incertae_sedis") %>% str_split("_") %>% map_chr(6),
-#       sep=" ")
-x$data$variable <- x$data$variable %>% 
-  str_remove("\nDifferential Abundance") %>%
-  str_replace("inoculum_site","site ")
-x
-```
-
-
-<br>
-
-___
-
-<br>
-
-## **Soil properties influence on microbiome and plant performance**
+# **Soil chemistry**
 
 **Overview of soil properties for each inoculum source:**
 

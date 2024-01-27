@@ -17,6 +17,12 @@ library(tidyverse); packageVersion("tidyverse")
 library(phyloseq); packageVersion("phyloseq")
 library(patchwork); packageVersion("patchwork")
 library(BacDive); packageVersion("BacDive")
+source("./R/palettes.R")
+
+drought_colors <- pal.discrete[c(2,5)]
+host_colors <- pal.discrete[c(7,10)] 
+fire_colors <- pal.discrete[c(18,2,14)]
+
 
 clean_model_df <- function(x){
   broom.mixed::tidy(x) %>% 
@@ -31,7 +37,7 @@ set.seed(666)
 readRenviron("./.Renviron")
 
 # Data
-bact <- readRDS("./Output/16S_clean_phyloseq_object.RDS")
+bact <- readRDS("./Output/phyloseq_objects/16S_clean_phyloseq_object.RDS")
 
 # initialize bacdive connection (add your userid and password)
 # BacDive URL: https://bacdive.dsmz.de/
@@ -99,9 +105,6 @@ bact_trait_db <- readRDS("./Output/16S_Bacterial_Trait_Database.RDS")
 bact_trait_db$Rhizobium$`132155`$`Physiology and metabolism`
 # DB_OBJECT   Genus   AccessionID   Trait Aspect
 
-bact_trait_db$Rhizobium$`132155`$`Physiology and metabolism` %>% 
-  str
-
 # 
 # # Best way night be a nested for-loop with lots of tests for missing data :(
 # 
@@ -166,6 +169,15 @@ pathogen_list <- pathogen_list %>% which %>% names
 # export
 saveRDS(pathogen_list,"./Output/list_of_pathogenic_bacterial_genera.RDS")
 
+# ADD TO PHYSEQ ####
+ps <- readRDS("./Output/phyloseq_objects/16S_clean_phyloseq_object.RDS")
+tax_df <- ps@tax_table[,c("Genus","Species")] %>% as.data.frame()
+tax_df2 <- data.frame(Genus = pathogen_list,Guild = "Pathogen")
+# Add it to "Species" slot of tax_table
+ps@tax_table[,"Species"] <- left_join(tax_df,tax_df2) %>% pluck("Guild")
+colnames(ps@tax_table)[7] <- "Guild"
+
+saveRDS(ps,"Output/phyloseq_objects/16S_clean_phyloseq_object_w_guilds.RDS")
 
 # CALCULATE BACTERIAL GUILD PROPORTIONS ####
 
@@ -200,8 +212,29 @@ grandfir_pathogen_plot <-
   theme_minimal() +
   theme(strip.text = element_text(face="bold",size=12)) +
   labs(x="Proportion of pathogenic bacterial genera",y="Scaled/Centered Value",color="Drought") +
-  scale_color_manual(values = pal.discrete[c(2,7)])
+  scale_color_manual(values = drought_colors)
 saveRDS(grandfir_pathogen_plot,"./Output/figs/16S_Pathogen_Plot_grandfir.RDS")
+
+
+grandfir_pathogen_plot2 <-
+  pathogen_df %>% 
+  dplyr::filter(species == "GrandFir") %>% 
+  mutate(across(c("wilting_scale","bud_number","leaf_number",
+                  "leaf_length","height","shoot_dm","final_root_dm"),
+                scale)) %>% # scale/center all indicators
+  pivot_longer(c("wilting_scale","bud_number","leaf_number",
+                 "leaf_length","height","shoot_dm","final_root_dm"),
+               names_to="indicator") %>% 
+  mutate(indicator = indicator %>% str_replace_all("_"," ") %>% str_to_sentence()) %>% 
+  ggplot(aes(x=proportion_pathogen,y=value,color=ordered(fire_freq,levels=c("0","1","3")))) +
+  geom_point(alpha=.5) +
+  geom_smooth(method='lm',se=FALSE) +
+  facet_wrap(~indicator,scales = 'free') +
+  theme_minimal() +
+  theme(strip.text = element_text(face="bold",size=12)) +
+  labs(x="Proportion of pathogenic bacterial genera",y="Scaled/Centered Value",color="Fire frequency") +
+  scale_color_manual(values = fire_colors)
+saveRDS(grandfir_pathogen_plot2,"./Output/figs/16S_Pathogen_Plot_grandfir_by_fire.RDS")
 
 snowbrush_pathogen_plot <-
   pathogen_df %>% 
@@ -223,9 +256,30 @@ snowbrush_pathogen_plot <-
   scale_color_manual(values = pal.discrete[c(2,7)])
 saveRDS(snowbrush_pathogen_plot,"./Output/figs/16S_Pathogen_Plot_snowbrush.RDS")
 
+snowbrush_pathogen_plot2 <-
+  pathogen_df %>% 
+  dplyr::filter(species == "Snowbrush") %>% 
+  mutate(across(c("wilting_scale","bud_number","leaf_number",
+                  "leaf_length","height","shoot_dm","final_root_dm"),
+                scale)) %>% # scale/center all indicators
+  pivot_longer(c("wilting_scale","bud_number","leaf_number",
+                 "leaf_length","height","shoot_dm","final_root_dm"),
+               names_to="indicator") %>% 
+  mutate(indicator = indicator %>% str_replace_all("_"," ") %>% str_to_sentence()) %>% 
+  ggplot(aes(x=proportion_pathogen,y=value,color=ordered(fire_freq,levels=c("0","1","3")))) +
+  geom_point(alpha=.5) +
+  geom_smooth(method='lm',se=FALSE) +
+  facet_wrap(~indicator,scales = 'free') +
+  theme_minimal() +
+  theme(strip.text = element_text(face="bold",size=12)) +
+  labs(x="Proportion of pathogenic bacterial genera",y="Scaled/Centered Value",color="Drought") +
+  scale_color_manual(values = fire_colors)
+saveRDS(snowbrush_pathogen_plot2,"./Output/figs/16S_Pathogen_Plot_snowbrush_by_fire.RDS")
+
+
 # MODELS ####
 grandfir_pathogen_glm <- 
-  guild_df %>% 
+  pathogen_df %>% 
   dplyr::filter(species == "GrandFir") %>% 
   mutate(across(c("wilting_scale","bud_number","leaf_number",
                   "leaf_length","height","shoot_dm","final_root_dm"),
@@ -234,12 +288,12 @@ grandfir_pathogen_glm <-
                  "leaf_length","height","shoot_dm","final_root_dm"),
                names_to="indicator") %>% 
   lmer(data=.,
-       formula=value ~ proportion_pathogen * drought + (1|block))
+       formula=value ~ proportion_pathogen * drought * fire_freq + (1|block))
 summary(grandfir_pathogen_glm)
-saveRDS(grandfir_pathogen_glm,"./Output/ITS_Pathogen_Model_GrandFir.RDS")
+saveRDS(grandfir_pathogen_glm,"./Output/16S_Pathogen_Model_GrandFir.RDS")
 
 snowbrush_pathogen_glm <- 
-  guild_df %>% 
+  pathogen_df %>% 
   dplyr::filter(species == "Snowbrush") %>% 
   mutate(across(c("wilting_scale","bud_number","leaf_number",
                   "leaf_length","height","shoot_dm","final_root_dm"),
@@ -248,7 +302,7 @@ snowbrush_pathogen_glm <-
                  "leaf_length","height","shoot_dm","final_root_dm"),
                names_to="indicator") %>% 
   lmer(data=.,
-       formula=value ~ proportion_pathogen * drought + (1|block))
+       formula=value ~ proportion_pathogen * drought * fire_freq + (1|block))
 summary(snowbrush_pathogen_glm)
 saveRDS(snowbrush_pathogen_glm,"./Output/16S_Pathogen_Model_Snowbrush.RDS")
 
@@ -260,3 +314,7 @@ full_guild_model_df <-
   select(-group)
 
 saveRDS(full_guild_model_df,"./Output/16S_Guild_Model_Output.RDS")
+
+
+readRDS("./Output/16S_Guild_Model_Output.RDS")
+readRDS("./Output/ITS_Guild_Model_Output.RDS")

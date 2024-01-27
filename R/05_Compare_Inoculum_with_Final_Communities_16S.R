@@ -1,18 +1,18 @@
 # -----------------------------------------------------------------------------#
-# Cleaning up the phyloseq object
+# Cleaning up the phyloseq object (fungal)
 # Author: Geoffrey Zahn
 # Software versions:  R v 4.2.2
 #                     tidyverse v 1.3.2
 #                     phyloseq v 1.46.0
 #                     ShortRead v 1.60.0
 #                     Biostrings v 2.70.1
-#                     adegenet v 2.1.10
-#                     readxl v 1.4.3
 #                     janitor v 2.2.0
 #                     microbiome v 1.24.0
 #                     vegan v 2.6.4
 #                     patchwork v 1.1.3
 #                     ecodist v 2.1.3
+#                     corncob v 0.4.1
+#                     patchwork v 1.1.3
 # -----------------------------------------------------------------------------#
 
 # SETUP ####
@@ -20,20 +20,33 @@ library(tidyverse); packageVersion("tidyverse")
 library(phyloseq); packageVersion("phyloseq")
 library(ShortRead); packageVersion("ShortRead")
 library(Biostrings); packageVersion("Biostrings")
-library(adegenet); packageVersion("adegenet")
-library(readxl); packageVersion("readxl")
 library(janitor); packageVersion("janitor")
 library(microbiome); packageVersion("microbiome")
 library(vegan); packageVersion("vegan")
 library(patchwork); packageVersion("patchwork")
 library(ecodist); packageVersion("ecodist")
+library(corncob); packageVersion("corncob")
+library(patchwork); packageVersion("patchwork")
+library(zahntools); packageVersion('zahntools') #github: gzahn/zahntools
 
-# options
+# seed
+set.seed(666)
+
+## Load Data ####
+site1.inoc.full <- readRDS("Output/phyloseq_objects/16S_site1.inoc.full.RDS")
+site2.inoc.full <- readRDS("Output/phyloseq_objects/16S_site2.inoc.full.RDS")
+site3.inoc.full <- readRDS("Output/phyloseq_objects/16S_site3.inoc.full.RDS")
+site4.inoc.full <- readRDS("Output/phyloseq_objects/16S_site4.inoc.full.RDS")
+site5.inoc.full <- readRDS("Output/phyloseq_objects/16S_site5.inoc.full.RDS")
+site6.inoc.full <- readRDS("Output/phyloseq_objects/16S_site6.inoc.full.RDS")
+
+# options and variables
 theme_set(theme_minimal())
 source("./R/palettes.R")
+'%ni%' <- Negate('%in%')
 
-# functions
-
+# FUNCTIONS ####
+z=site1.inoc.full
 find_remaining_taxa <- function(z){
   
   # inoculum
@@ -42,6 +55,8 @@ find_remaining_taxa <- function(z){
     subset_samples(community == "inoculum") %>% 
     subset_taxa(taxa_sums(z %>% 
                             subset_samples(community == "inoculum")) > 0) %>% 
+    # should we merge the inoculum samples to give an easier overview?
+    merge_samples("community",fun = 'sum') %>% 
     transform_sample_counts(function(x){x/sum(x)})
   i@phy_tree <- NULL
   
@@ -51,7 +66,7 @@ find_remaining_taxa <- function(z){
     subset_samples(community == "final") %>% 
     subset_taxa(taxa_sums(z %>% 
                             subset_samples(community == "final")) > 0) #%>%
-    # transform_sample_counts(function(x){x/sum(x)})
+  # transform_sample_counts(function(x){x/sum(x)})
   f@phy_tree <- NULL
   
   # remaining taxa from inoculum
@@ -59,16 +74,74 @@ find_remaining_taxa <- function(z){
   
   fr <- 
     f %>% 
-    subset_taxa(taxa_names(f) %in% r) #%>% 
-    # transform_sample_counts(function(x){x/sum(x)})
-  # ir <- 
-  #   i %>% 
-  #   subset_taxa(taxa_names(i) %in% r) %>% 
-  #   transform_sample_counts(function(x){x/sum(x)})
+    subset_taxa(taxa_names(f) %in% r) 
+  
+  fr <- 
+    fr %>% 
+    # subset_taxa(taxa_sums(fr) > 0) %>% 
+    transform_sample_counts(function(x){x/sum(x)})
+  
+  # return list of ps objects
+  output <- 
+    list(inoculum_ra = i,
+         final_ra = fr)
   
   # merge initial and final subsets
-  full <- merge_phyloseq(fr,i)
-  return(full)
+  # full <- merge_phyloseq(fr,i)
+  return(output)
+}
+
+
+build_remaining_dfs <- function(z, inoc.site, only.final.taxa = FALSE){
+  
+  inoc_site <- paste0("Inoculum ",inoc.site)
+  
+  inoc <- 
+    z[["inoculum_ra"]] %>% 
+    otu_table() %>% 
+    as("matrix") %>% 
+    t() %>% 
+    as.data.frame() %>% 
+    mutate(taxon_name = corncob::otu_to_taxonomy(taxa_names(z[["inoculum_ra"]]), z[["inoculum_ra"]])) %>% 
+    mutate(rel_abund = inoculum,
+           sample = "inoculum",
+           rel_abund_transformed = ifelse(rel_abund > quantile(rel_abund,.95,na.rm=TRUE),quantile(rel_abund,.95,na.rm=TRUE),rel_abund),
+           inoc_source = inoc_site) %>% 
+    select(taxon_name,sample,rel_abund,rel_abund_transformed,inoc_source)
+  
+  drought <- z[["final_ra"]]@sam_data$drought
+  host <- z[["final_ra"]]@sam_data$species
+  sample <- sample_names(z[["final_ra"]])
+  
+  meta <- data.frame(drought,host,sample) %>% 
+    mutate(host_sciname = case_when(host == "GrandFir" ~ "A. grandis",
+                                    host == "Snowbrush" ~ "C. velutinus"))
+  
+  
+  taxa_names(successful_1[[1]])
+  
+  final <- 
+    z[["final_ra"]] %>% 
+    otu_table() %>% 
+    as("matrix") %>% 
+    t() %>% 
+    as.data.frame() %>% 
+    mutate(taxon_name = corncob::otu_to_taxonomy(row.names(.),z[["final_ra"]])) %>% 
+    pivot_longer(-taxon_name,names_to = "sample",values_to = "rel_abund") %>% 
+    mutate(rel_abund_transformed = ifelse(rel_abund > quantile(rel_abund,.95,na.rm=TRUE),quantile(rel_abund,.95,na.rm=TRUE),rel_abund),
+           inoc_source = inoc_site)
+  
+  final <- full_join(final,meta)
+  
+  if(only.final.taxa){
+    inoc <- 
+      inoc %>% 
+      dplyr::filter(taxon_name %in% unique(final$taxon_name))
+  }
+  
+  return(list(inoculum = inoc,
+              pot = final))
+  
 }
 
 plot_remaining_taxa_bar <- function(x){
@@ -80,33 +153,41 @@ plot_remaining_taxa_bar <- function(x){
           axis.title = element_text(face='bold',size=12))
 }
 
-plot_remaining_heatmap <- function(z){
-  x <- z %>% 
-    merge_samples("community") %>% 
-    transform_sample_counts(function(x){x/sum(x)}) %>% 
-    otu_table() %>% 
-    as("matrix") 
-  x[is.nan(x)] <- 0
-  x <- x[,colSums(x) != 0]
-  x <- x %>% as.data.frame()
-  
-  max_95 <- x %>% 
-    mutate(group=row.names(.)) %>% 
-    pivot_longer(-group) %>% 
-    pluck("value") %>% 
-    quantile(.95)
-  
-  x %>% 
-    mutate(group=row.names(.)) %>% 
-    pivot_longer(-group) %>% 
-    mutate(newvalue = ifelse(value > max_95,max_95,value)) %>% 
-    ggplot(aes(x=group,y=name,fill=newvalue)) +
+plot_remaining_heatmap <- function(z, viridis.option='mako'){
+  inoc_plot <- 
+    z$inoculum %>% 
+    ggplot(aes(x=sample,y=taxon_name,fill=rel_abund_transformed)) +
     geom_tile() +
-    theme(axis.text.y = element_blank(),axis.text.x = element_text(face='bold',size=12)) +
-    scale_fill_viridis_c() +
-    labs(fill="Relative\nabundance",x="",y="ASV")
+    scale_fill_viridis_c(option = viridis.option) +
+    labs(x="",
+         y="ASVs")  +
+    facet_wrap(~ inoc_source) +
+    theme(axis.text.y = element_blank(),
+          axis.text.x = element_blank(),
+          axis.title.x = element_text(face='bold',size=14),
+          legend.position = 'none',
+          strip.text = element_text(face='bold',size=10),
+          axis.ticks = element_blank())
   
+  
+  final_plot <- 
+    z$pot %>% 
+    ggplot(aes(x=sample,y=taxon_name,fill=rel_abund_transformed)) +
+    geom_tile() +
+    scale_fill_viridis_c(option = viridis.option) +
+    labs(x="",y="") +
+    theme(axis.text.y = element_blank(),
+          axis.text.x = element_text(angle=90,hjust=1,vjust=.5),
+          legend.position = 'none',
+          axis.title = element_text(face='bold',size=12)) +
+    facet_wrap(~host_sciname*drought,scales = 'free_x',nrow = 1) +
+    theme(strip.text = element_text(face='bold.italic',size=10),
+          axis.ticks = element_blank())
+  
+  return(list(inoc = inoc_plot,
+              final = final_plot))  
 }
+
 
 MRM_remaining_taxa <- function(z){
   fin <- 
@@ -128,20 +209,41 @@ MRM_remaining_taxa <- function(z){
   
   return(ecodist::MRM(fin ~ ini))
 }
-# seed
-set.seed(666)
 
-# Load Data
-site1.inoc.full <- readRDS("Output/phyloseq_objects/16S_site1.inoc.full.RDS")
-site2.inoc.full <- readRDS("Output/phyloseq_objects/16S_site2.inoc.full.RDS")
-site3.inoc.full <- readRDS("Output/phyloseq_objects/16S_site3.inoc.full.RDS")
-site4.inoc.full <- readRDS("Output/phyloseq_objects/16S_site4.inoc.full.RDS")
-site5.inoc.full <- readRDS("Output/phyloseq_objects/16S_site5.inoc.full.RDS")
-site6.inoc.full <- readRDS("Output/phyloseq_objects/16S_site6.inoc.full.RDS")
+find_dropped_taxa <- function(ps_list){
+  dropped_seqs <- taxa_names(ps_list$inoculum_ra)[taxa_names(ps_list$inoculum_ra) %ni% taxa_names(ps_list$final_ra)]
+  dropped_taxa <- corncob::otu_to_taxonomy(dropped_seqs,ps_list$inoculum_ra)
+  return(dropped_taxa)
+}
+
+run_MRM_inoc_final <- 
+  function(ps){
+    inoc <- 
+      ps$inoculum_ra %>% 
+      subset_taxa(taxa_names(ps$inoculum_ra) %in% taxa_names(ps$final_ra))
+    inoc@sam_data$community <- "inoculum"
+    
+    final <- ps$final_ra %>% 
+      subset_taxa(taxa_names(ps$final_ra) %in% taxa_names(ps$inoculum_ra))
+    
+    # build distance matrices for both communities
+    sample_sums(inoc)
+    final_inoc_dist <- final@otu_table %>% as('matrix') %>% t() %>% vegan::vegdist(na.rm = TRUE)
+    initial_inoc_dist <- inoc@otu_table %>% as('matrix') %>% t() %>% vegan::vegdist(na.rm = TRUE)
+    
+    # save ecodist tables
+    MRM_results <- 
+      ecodist::MRM(final_inoc_dist ~ initial_inoc_dist) %>% 
+      as.data.frame() 
+    
+    return(MRM_results)
+}
+
+
 
 # ORDINATIONS (DCA) ####
 ord_1 <- 
-site1.inoc.full %>% 
+  site1.inoc.full %>% 
   transform_sample_counts(function(x){x/sum(x)}) %>% 
   ordinate(method = "DCA",distance = "unifrac")
 inoc_plot_1 <- plot_ordination(site1.inoc.full,ord_1,color = "community") + scale_color_manual(values=pal.discrete[c(5,2)])
@@ -181,76 +283,166 @@ ord_6 <-
   ordinate(method = "DCA",distance = "unifrac")
 inoc_plot_6 <- plot_ordination(site6.inoc.full,ord_6,color = "community") + scale_color_manual(values=pal.discrete[c(5,2)])
 saveRDS(inoc_plot_6,"./Output/figs/16S_inoc_plot_6.RDS")
+taxa_are_rows(site1.inoc.full)
 
 # FIND OVERLAP BETWEEN INOCULUM AND FINAL ####
-z <- site1.inoc.full
-successful_1 <- find_remaining_taxa(site1.inoc.full)
-z <- site2.inoc.full
-successful_2 <- find_remaining_taxa(site2.inoc.full)
-z <- site3.inoc.full
-successful_3 <- find_remaining_taxa(site3.inoc.full)
-z <- site4.inoc.full
-successful_4 <- find_remaining_taxa(site4.inoc.full)
-z <- site5.inoc.full
-successful_5 <- find_remaining_taxa(site5.inoc.full)
-z <- site6.inoc.full
-successful_6 <- find_remaining_taxa(site6.inoc.full)
+# function is not pulling argument from function call for some reason. Whatever, I'm tired and this works:
+z=site1.inoc.full; successful_1 <- find_remaining_taxa(z)
+z=site2.inoc.full; successful_2 <- find_remaining_taxa(z)
+z=site3.inoc.full; successful_3 <- find_remaining_taxa(z)
+z=site4.inoc.full; successful_4 <- find_remaining_taxa(z)
+z=site5.inoc.full; successful_5 <- find_remaining_taxa(z)
+z=site6.inoc.full; successful_6 <- find_remaining_taxa(z)
+
+## build data frames for each inoculum set ####
+remaining_1 <- build_remaining_dfs(successful_1,inoc.site = "1")
+remaining_2 <- build_remaining_dfs(successful_2,inoc.site = "2")
+remaining_3 <- build_remaining_dfs(successful_3,inoc.site = "3")
+remaining_4 <- build_remaining_dfs(successful_4,inoc.site = "4")
+remaining_5 <- build_remaining_dfs(successful_5,inoc.site = "5")
+remaining_6 <- build_remaining_dfs(successful_6,inoc.site = "6")
+
+remaining_1_p <- build_remaining_dfs(successful_1,inoc.site = "1",only.final.taxa = TRUE)
+remaining_2_p <- build_remaining_dfs(successful_2,inoc.site = "2",only.final.taxa = TRUE)
+remaining_3_p <- build_remaining_dfs(successful_3,inoc.site = "3",only.final.taxa = TRUE)
+remaining_4_p <- build_remaining_dfs(successful_4,inoc.site = "4",only.final.taxa = TRUE)
+remaining_5_p <- build_remaining_dfs(successful_5,inoc.site = "5",only.final.taxa = TRUE)
+remaining_6_p <- build_remaining_dfs(successful_6,inoc.site = "6",only.final.taxa = TRUE)
+
+
+
 
 
 # PLOT HEATMAPS ####
-# color scale maxed out at 95th percentile
-p1 <- plot_remaining_heatmap(successful_1) + ggtitle("Inoculum 1") + theme(legend.position = 'none')
-p2 <- plot_remaining_heatmap(successful_2) + ggtitle("Inoculum 2") + theme(legend.position = 'none')
-p3 <- plot_remaining_heatmap(successful_3) + ggtitle("Inoculum 3") + theme(legend.position = 'none')
-p4 <- plot_remaining_heatmap(successful_4) + ggtitle("Inoculum 4") + theme(legend.position = 'none')
-p5 <- plot_remaining_heatmap(successful_5) + ggtitle("Inoculum 5") + theme(legend.position = 'none')
-p6 <- plot_remaining_heatmap(successful_6) + ggtitle("Inoculum 6") + theme(legend.position = 'none')
 
-(p1 + p2 + p3) / (p4 + p5 + p6)
-ggsave("./Output/figs/16S_Inoculum_Taxa_Before_and_After.png",width = 8,height = 6)
+# use versions where only taxa shown for inoculum are also present in the final pot community
+heatmaps_1 <- plot_remaining_heatmap(remaining_1_p)
+heatmaps_2 <- plot_remaining_heatmap(remaining_2_p)
+heatmaps_3 <- plot_remaining_heatmap(remaining_3_p)
+heatmaps_4 <- plot_remaining_heatmap(remaining_4_p)
+heatmaps_5 <- plot_remaining_heatmap(remaining_5_p)
+heatmaps_6 <- plot_remaining_heatmap(remaining_6_p)
+
+
+p1 <- heatmaps_1$inoc + heatmaps_1$final + plot_layout(widths = c((3/4), 3))
+p2 <- heatmaps_2$inoc + heatmaps_2$final + plot_layout(widths = c((3/4), 3))
+p3 <- heatmaps_3$inoc + heatmaps_3$final + plot_layout(widths = c((3/4), 3))
+p4 <- heatmaps_4$inoc + heatmaps_4$final + plot_layout(widths = c((3/4), 3))
+p5 <- heatmaps_5$inoc + heatmaps_5$final + plot_layout(widths = c((3/4), 3))
+p6 <- heatmaps_6$inoc + heatmaps_6$final + plot_layout(widths = c((3/4), 3))
+
+# save heatmaps
+p1; ggsave("./Output/figs/16S_inoculum_taxa_heatmaps_inoc-1.png",dpi=300,height = 8,width = 6)
+p2; ggsave("./Output/figs/16S_inoculum_taxa_heatmaps_inoc-2.png",dpi=300,height = 8,width = 6)
+p3; ggsave("./Output/figs/16S_inoculum_taxa_heatmaps_inoc-3.png",dpi=300,height = 8,width = 6)
+p4; ggsave("./Output/figs/16S_inoculum_taxa_heatmaps_inoc-4.png",dpi=300,height = 8,width = 6)
+p5; ggsave("./Output/figs/16S_inoculum_taxa_heatmaps_inoc-5.png",dpi=300,height = 8,width = 6)
+p6; ggsave("./Output/figs/16S_inoculum_taxa_heatmaps_inoc-6.png",dpi=300,height = 8,width = 6)
+
+
+
+# FIND TAXA THAT DIDN'T SURVIVE ####
+# Taxa that are in the inoculum, but not in the final pot community
+
+dropped_1 <- find_dropped_taxa(successful_1)
+dropped_2 <- find_dropped_taxa(successful_2)
+dropped_3 <- find_dropped_taxa(successful_3)
+dropped_4 <- find_dropped_taxa(successful_4)
+dropped_5 <- find_dropped_taxa(successful_5)
+dropped_6 <- find_dropped_taxa(successful_6)
+# list of fungi found in all inoculum sources that did not persist in any pots
+unsuccessful_transplant_taxa <- 
+  dropped_1[dropped_1 %in% c(dropped_2,dropped_3,dropped_4,dropped_5,dropped_6)]
+# list of all unique taxa that didn't transplant successfully
+unsuccessful_asvs <- 
+  list(dropped_1,dropped_2,dropped_3,dropped_4,dropped_5,dropped_6) %>% 
+  map(names) %>% 
+  map(unique) %>% 
+  unlist() %>% 
+  unique()
+
+## Taxonomic breakdown of unsuccessful vs successful taxa ####
+
+# load up full fungal phyloseq (inoculum only)
+bact <- merge_phyloseq(site1.inoc.full,site2.inoc.full,site3.inoc.full,site4.inoc.full,site5.inoc.full,site6.inoc.full) %>% 
+  subset_samples(community == "inoculum")
+bact@sam_data$inoculum_site <- 
+  bact@sam_data$sample_name %>% str_split("W") %>% map_chr(2)
+
+
+bact_successful <- bact %>% 
+  subset_taxa(taxa_names(bact) %ni% unsuccessful_asvs)
+sample_names(bact_successful) <- paste0(sample_names(bact_successful),"_S")
+bact_successful@phy_tree <- NULL
+
+bact_unsuccessful <- bact %>% 
+  subset_taxa(taxa_names(bact) %in% unsuccessful_asvs)
+sample_names(bact_unsuccessful) <- paste0(sample_names(bact_unsuccessful),"_U")
+bact_unsuccessful@phy_tree <- NULL
+
+bact <- merge_phyloseq(bact_successful,bact_unsuccessful)
+bact@sam_data$success <- rep(c(TRUE,FALSE),each=18)
+
+bact@sam_data$mergevar <- paste0(bact@sam_data$other_frompreviouscolumn,"_", bact@sam_data$success)
+bact_merged <- bact %>% 
+  merge_samples("mergevar") %>% 
+  transform_sample_counts(function(x){x/sum(x)})
+# repair metadata
+bact_merged@sam_data$success <- sample_names(bact_merged) %>% str_split("_") %>% map_chr(2)
+bact_merged@sam_data$site <- sample_names(bact_merged) %>% str_split("_") %>% map_chr(1)
+
+bact_merged %>% 
+  psmelt() %>% 
+  mutate(success=ifelse(success == "FALSE","Unsuccessful","Successful")) %>% 
+  ggplot(aes(x=site,y=Abundance,fill=Phylum)) +
+  geom_col() +
+  coord_flip() +
+  facet_wrap(~success) +
+  scale_fill_viridis_d() +
+  theme(strip.text = element_text(face='bold',size = 12),
+        axis.text = element_text(face='bold',size=12),
+        axis.title = element_text(face='bold',size=12)) +
+  labs(x="",y="Relative abundance",title = "Taxonomy of successfully vs \nunsuccessfully transplanted ASVs")
+ggsave("./Output/figs/16S_successful_vs_unsuccessful_taxa_breakdown.png",width = 12,height = 8)
+
+
+data.frame(
+  Taxonomy = corncob::otu_to_taxonomy(unsuccessful_asvs,bact),
+  ASV = names(corncob::otu_to_taxonomy(unsuccessful_asvs,bact))
+) %>% saveRDS("./Output/16S_unsuccessful_ASV_transplants.RDS")
+
+
+# Annotate phytree ####
+# It would be great to put this info on a phylogenetic tree to see if theres a signal !
+# calculate which taxa were successful or not ...
+# add to "Species" slot in tax_table of full phyloseq object
+# plot tree and color by "species"
 
 
 # MRM ####
 # does initial community predict final community (only taxa found initially in inoculum)?
-mrm_1 <- MRM_remaining_taxa(successful_1)
-mrm_2 <- MRM_remaining_taxa(successful_2)
-mrm_3 <- MRM_remaining_taxa(successful_3)
-mrm_4 <- MRM_remaining_taxa(successful_4)
-mrm_5 <- MRM_remaining_taxa(successful_5)
-mrm_6 <- MRM_remaining_taxa(successful_6)
 
+ps <- successful_1; mrm_1 <- run_MRM_inoc_final(ps)
+ps <- successful_2; mrm_2 <- run_MRM_inoc_final(ps)
+ps <- successful_3; mrm_3 <- run_MRM_inoc_final(ps)
+ps <- successful_4; mrm_4 <- run_MRM_inoc_final(ps)
+ps <- successful_5; mrm_5 <- run_MRM_inoc_final(ps)
+ps <- successful_6; mrm_6 <- run_MRM_inoc_final(ps)
+
+# Pull MRM results tables into single table
 MRM_df <- 
-cbind(inoculum=c("Inoc_1","Inoc_2","Inoc_3","Inoc_4","Inoc_5","Inoc_6"),
-      rbind(
-        unlist(mrm_1),
-        unlist(mrm_2),
-        unlist(mrm_3),
-        unlist(mrm_4),
-        unlist(mrm_5),
-        unlist(mrm_6)) 
-) %>% 
+  cbind(inoculum=c("Inoc_1","Inoc_4","Inoc_6"),
+        rbind(
+          unlist(mrm_1 %>% filter(row.names(.) != "Int")),
+          unlist(mrm_4 %>% filter(row.names(.) != "Int")),
+          unlist(mrm_6 %>% filter(row.names(.) != "Int"))) 
+  ) %>% 
   as.data.frame() %>% 
-  mutate(coef1=as.numeric(coef1),
-         coef2=as.numeric(coef2),
-         coef3=as.numeric(coef3),
-         coef4=as.numeric(coef4),
-         r.squared.R2=as.numeric(r.squared.R2),
-         r.squared.pval=as.numeric(r.squared.pval),
-         F.test.F=as.numeric(F.test.F),
-         F.test.F.pval=as.numeric(F.test.F.pval)) %>% 
-  mutate(across(where(is.numeric),function(x){round(x,2)}))
-saveRDS(MRM_df,"./Output/16S_MRM_stats_table.RDS")
+  mutate(coef.final_inoc_dist=as.numeric(coef.final_inoc_dist),
+         coef.pval=as.numeric(coef.pval),
+         r.squared=as.numeric(r.squared),
+         F.test=as.numeric(F.test)) %>% 
+  mutate(across(where(is.numeric),function(x){round(x,3)}))
+saveRDS(MRM_df,"./Output/16S_MRM_stats_table_inoc_vs_final.RDS")
 
-
-
-# BARPLOTS OF REMAINING TAXA ####
-plot_remaining_taxa_bar(successful_1)
-plot_remaining_taxa_bar(successful_2)
-plot_remaining_taxa_bar(successful_3)
-plot_remaining_taxa_bar(successful_4)
-plot_remaining_taxa_bar(successful_5)
-plot_remaining_taxa_bar(successful_6)
-
-
-# before and after
 
