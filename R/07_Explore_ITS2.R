@@ -35,9 +35,12 @@ library(janitor); packageVersion("janitor")
 options(scipen=999)
 '%ni%' <- Negate('%in%')
 theme_set(theme_minimal())
+
 source("./R/palettes.R")
 drought_colors <- pal.discrete[c(2,5)]
 host_colors <- pal.discrete[c(7,10)] 
+fire_colors <- pal.discrete[c(18,2,14)]
+
 set.seed(666)
 
 plot_topten_relabund <- function(x){
@@ -396,7 +399,7 @@ p1 <-
   theme(strip.text.x = element_text(face='bold.italic'),
         axis.title = element_text(face='bold',size=12),
         legend.title = element_text(face='bold')) +
-  labs(color="Drought",title="Bacterial ordinations")
+  labs(color="Drought",title="Fungal ordinations")
 p1; saveRDS(p1,"./Output/figs/ITS_Ordination_Plots_Drought.RDS")
 
 p2 <- 
@@ -409,7 +412,7 @@ p2 <-
   theme(strip.text.x = element_text(face='bold.italic'),
         axis.title = element_text(face='bold',size=12),
         legend.title = element_text(face='bold')) +
-  labs(color="Inoculum source",title="Bacterial ordinations")
+  labs(color="Inoculum source",title="Fungal ordinations")
 p2; saveRDS(p2,"./Output/figs/ITS_Ordination_Plots_Site.RDS")
 
 p3 <- 
@@ -423,8 +426,23 @@ p3 <-
         axis.title = element_text(face='bold',size=12),
         legend.title = element_text(face='bold'),
         legend.text = element_text(face='italic')) +
-  labs(color="Host",title="Bacterial ordinations") 
+  labs(color="Host",title="Fungal ordinations") 
 p3; saveRDS(p3,"./Output/figs/ITS_Ordination_Plots_Host.RDS")
+
+
+p4 <- 
+  ord_df_long %>% 
+  ggplot(aes(X,Y,color=ordered(fire_freq,levels=c("0","1","3")))) +
+  geom_point() +
+  stat_ellipse() +
+  facet_wrap(~method,scales = 'free',nrow=1) +
+  scale_color_manual(values=fire_colors) +
+  theme(strip.text.x = element_text(face='bold.italic'),
+        axis.title = element_text(face='bold',size=12),
+        legend.title = element_text(face='bold'),
+        legend.text = element_text(face='italic')) +
+  labs(color="Fire frequency",title="Fungal ordinations") 
+p4; saveRDS(p4,"./Output/figs/ITS_Ordination_Plots_Fire.RDS")
 
 ## models ####
 

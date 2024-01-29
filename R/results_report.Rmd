@@ -279,8 +279,11 @@ ___
 
 ```{r, fig.width=8,fig.height=6}
 readRDS("../Output/figs/16S_Ordination_Plots_Host.RDS") + theme(legend.position = 'bottom')
+readRDS("../Output/figs/16S_Ordination_Plots_Host.RDS")
 readRDS("../Output/figs/16S_Ordination_Plots_Drought.RDS") + theme(legend.position = 'bottom')
 readRDS("../Output/figs/16S_Ordination_Plots_Site.RDS") + theme(legend.position = 'bottom')
+readRDS("./Output/figs/16S_Ordination_Plots_Fire.RDS") + theme(legend.position = 'bottom')
+cat("PermANOVA run without outlier Sterile-inoculum root samples...")
 readRDS("../Output/16S_Permanova_Table.RDS") %>% 
   kable() %>% kable_classic(lightable_options = 'hover')
 ```
@@ -290,9 +293,13 @@ readRDS("../Output/16S_Permanova_Table.RDS") %>%
 ## **Fungi**
 
 ```{r, fig.width=8,fig.height=6}
-readRDS("../Output/figs/ITS_Ordination_Plots_Host.RDS") + theme(legend.position = 'bottom') + ggtitle("Fungal ordinations")
-readRDS("../Output/figs/ITS_Ordination_Plots_Drought.RDS") + theme(legend.position = 'bottom') + ggtitle("Fungal ordinations")
-readRDS("../Output/figs/ITS_Ordination_Plots_Site.RDS") + theme(legend.position = 'bottom') + ggtitle("Fungal ordinations")
+readRDS("../Output/figs/ITS_Ordination_Plots_Host.RDS") + theme(legend.position = 'bottom')
+readRDS("../Output/figs/ITS_Ordination_Plots_Drought.RDS") + theme(legend.position = 'bottom')
+readRDS("../Output/figs/ITS_Ordination_Plots_Site.RDS") + theme(legend.position = 'bottom')
+readRDS("../Output/figs/ITS_Ordination_Plots_Fire.RDS") + theme(legend.position = 'bottom')
+
+cat("PermANOVA run without outlier Sterile-inoculum root samples...")
+
 readRDS("../Output/ITS_Permanova_Table.RDS") %>% 
   kable() %>% kable_classic(lightable_options = 'hover')
 ```
@@ -388,13 +395,31 @@ _____
 
 # **Network properties**
 
-**Do we want to get into this in this paper?**
+## **Selected network attributes**
 
-## **Bacteria**
+```{r, fig.width='100%'}
+readRDS("../Output/figs/Network_Attributes_Plot_by_host-inoc-kingdom.RDS")
+```
 
-## **Fungi**
+## **Network properties vs Plant Health**
 
-## **Cross-Domain** 
+(Composite scaled-centered plant health measures)
+
+```{r}
+net_mod <- readRDS("../Output/Model_Network_Attributes_vs_Plant_Health.RDS")
+```
+
+
+```net_mod$formula```
+
+
+```{r}
+net_mod %>% 
+  broom::tidy() %>% 
+  kable() %>% 
+  kable_classic(lightable_options = 'hover')
+```
+
 
 
 <br>

@@ -35,9 +35,12 @@ library(janitor); packageVersion("janitor")
 options(scipen=999)
 '%ni%' <- Negate('%in%')
 theme_set(theme_minimal())
+
 source("./R/palettes.R")
 drought_colors <- pal.discrete[c(2,5)]
 host_colors <- pal.discrete[c(7,10)] 
+fire_colors <- pal.discrete[c(18,2,14)]
+
 set.seed(666)
 
 plot_topten_relabund <- function(x){
@@ -429,6 +432,21 @@ ord_df_long %>%
   labs(color="Inoculum source",title="Bacterial ordinations") 
 p3; saveRDS(p3,"./Output/figs/16S_Ordination_Plots_Host.RDS")
 
+p4 <- 
+  ord_df_long %>% 
+  ggplot(aes(X,Y,color=ordered(fire_freq,levels=c("0","1","3")))) +
+  geom_point() +
+  stat_ellipse() +
+  facet_wrap(~method,scales = 'free',nrow=1) +
+  scale_color_manual(values=fire_colors) +
+  theme(strip.text.x = element_text(face='bold.italic'),
+        axis.title = element_text(face='bold',size=12),
+        legend.title = element_text(face='bold'),
+        legend.text = element_text(face='italic')) +
+  labs(color="Fire frequency",title="Bacterial ordinations") 
+p4; saveRDS(p4,"./Output/figs/16S_Ordination_Plots_Fire.RDS")
+
+
 ## models ####
 
 # make tidy asv table
@@ -450,11 +468,7 @@ adonis2(data = adonis_df,
   broom::tidy() %>% 
   mutate(term = term %>% str_remove_all("adonis_df\\$"))
 
-permanova_results; saveRDS(permanova_results,"./Output/16S_Permanova_Table.RDS")
-print(paste("PermANOVA significant explanatory power of:",permanova_results %>% 
-              dplyr::filter(p.value <= .05) %>% 
-              pluck("R2") %>% 
-              sum() %>% round(4)))
+
 
 # FIND IMPORTANT TAXA ####
 

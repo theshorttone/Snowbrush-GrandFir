@@ -10,6 +10,8 @@ Taxonomy/
 # Big files
 Output/16S_ML_Distance.RDS
 
+# igraph plots (one for each sample)
+Output/figs/igraphs/
 
 # History files
 .Rhistory
