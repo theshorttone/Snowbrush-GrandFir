@@ -282,7 +282,7 @@ readRDS("../Output/figs/16S_Ordination_Plots_Host.RDS") + theme(legend.position 
 readRDS("../Output/figs/16S_Ordination_Plots_Host.RDS")
 readRDS("../Output/figs/16S_Ordination_Plots_Drought.RDS") + theme(legend.position = 'bottom')
 readRDS("../Output/figs/16S_Ordination_Plots_Site.RDS") + theme(legend.position = 'bottom')
-readRDS("./Output/figs/16S_Ordination_Plots_Fire.RDS") + theme(legend.position = 'bottom')
+readRDS("../Output/figs/16S_Ordination_Plots_Fire.RDS") + theme(legend.position = 'bottom')
 cat("PermANOVA run without outlier Sterile-inoculum root samples...")
 readRDS("../Output/16S_Permanova_Table.RDS") %>% 
   kable() %>% kable_classic(lightable_options = 'hover')
@@ -397,7 +397,7 @@ _____
 
 ## **Selected network attributes**
 
-```{r, fig.width='100%'}
+```{r networkplots1}
 readRDS("../Output/figs/Network_Attributes_Plot_by_host-inoc-kingdom.RDS")
 ```
 

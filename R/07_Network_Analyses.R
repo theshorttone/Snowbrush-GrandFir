@@ -664,7 +664,7 @@ attribute_plots[[i]] <- p
 attribute_multiplot <- 
 attribute_plots$n_vertices + attribute_plots$n_edges + attribute_plots$mean_dist + attribute_plots$clique_num + attribute_plots$mean_betweenness + 
   attribute_plots$mean_closeness + attribute_plots$mean_coreness + attribute_plots$global_effic + attribute_plots$clustering_coeficient + attribute_plots$max_degree +
-  patchwork::plot_layout(guides = 'collect',nrow = 2) +
+  patchwork::plot_layout(guides = 'collect',nrow = 5) +
   patchwork::plot_annotation(title = "Community network properties")
 
 # save plot for later (Supplementary Info)
