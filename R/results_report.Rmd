@@ -397,7 +397,7 @@ _____
 
 ## **Selected network attributes**
 
-```{r networkplots1}
+```{r networkplots1, fig.height=24}
 readRDS("../Output/figs/Network_Attributes_Plot_by_host-inoc-kingdom.RDS")
 ```
 
