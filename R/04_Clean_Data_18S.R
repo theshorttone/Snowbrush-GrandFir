@@ -35,6 +35,10 @@ set.seed(666)
 # DATA ####
 ps <- readRDS("./Output/18S_ps_not-cleaned.RDS") # change to non-phylogeny stuff
 
+# clean up wilting_scale
+ps@sam_data$wilting_scale <- (1 / ps@sam_data$wilting_scale)
+
+
 # Taxonomic ranks from PR2/Maarjam
 colnames(tax_table(ps)) <- c("Domain","Supergroup","Division","Kingdom","Phylum","Subdivision","Order","Genus","Species")
 

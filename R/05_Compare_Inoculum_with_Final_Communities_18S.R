@@ -31,22 +31,35 @@ library(zahntools); packageVersion('zahntools')#github: gzahn/zahntools
 # seed
 set.seed(666)
 
-## Load Data ####
-site1.inoc.full <- readRDS("Output/phyloseq_objects/ITS_site1.inoc.full.RDS")
-site2.inoc.full <- readRDS("Output/phyloseq_objects/ITS_site2.inoc.full.RDS")
-site3.inoc.full <- readRDS("Output/phyloseq_objects/ITS_site3.inoc.full.RDS")
-site4.inoc.full <- readRDS("Output/phyloseq_objects/ITS_site4.inoc.full.RDS")
-site5.inoc.full <- readRDS("Output/phyloseq_objects/ITS_site5.inoc.full.RDS")
-site6.inoc.full <- readRDS("Output/phyloseq_objects/ITS_site6.inoc.full.RDS")
-
-
 # options and variables
 theme_set(theme_minimal())
 source("./R/palettes.R")
 '%ni%' <- Negate('%in%')
 
-
 # FUNCTIONS ####
+
+condense_ps_to_species <- function(x){
+  # remove bad taxa assignments
+  x <- x %>% subset_taxa(!is.na(Phylum))
+  # build data frame
+  sp <- x@tax_table[,9] %>% as.character()
+  gn <- x@tax_table[,8] %>% as.character()
+  or <- x@tax_table[,7] %>% as.character()
+  sb <- x@tax_table[,6] %>% as.character()
+  ph <- x@tax_table[,5] %>% as.character()
+  
+  condensed_taxonomy <- 
+    data.frame(ph,sb,or,gn,sp) %>% 
+    mutate(spp = case_when(is.na(or) & is.na(gn) & is.na(sp) ~ paste0(sb," sp."),
+                           !is.na(or) & is.na(gn) & is.na(sp) ~ paste0(or," sp."),
+                           !is.na(or) & !is.na(gn) & is.na(sp) ~ paste0(gn," sp."),
+                           !is.na(or) & !is.na(gn) & !is.na(sp) ~ sp))
+  
+  x@tax_table[,9] <- str_replace_all(condensed_taxonomy$spp,"_"," ")
+  x <- tax_glom(x,"Species")
+  return(x)
+}
+
 
 find_remaining_taxa <- function(z){
   
@@ -241,54 +254,66 @@ run_MRM_inoc_final <-
   }
 
 
+# LOAD DATS ####
+## Load Data ####
+site1.inoc.full <- readRDS("Output/phyloseq_objects/18S_site1.inoc.full.RDS") %>% condense_ps_to_species()
+site2.inoc.full <- readRDS("Output/phyloseq_objects/18S_site2.inoc.full.RDS") %>% condense_ps_to_species()
+site3.inoc.full <- readRDS("Output/phyloseq_objects/18S_site3.inoc.full.RDS") %>% condense_ps_to_species()
+site4.inoc.full <- readRDS("Output/phyloseq_objects/18S_site4.inoc.full.RDS") %>% condense_ps_to_species()
+site5.inoc.full <- readRDS("Output/phyloseq_objects/18S_site5.inoc.full.RDS") %>% condense_ps_to_species()
+site6.inoc.full <- readRDS("Output/phyloseq_objects/18S_site6.inoc.full.RDS") %>% condense_ps_to_species()
+
+
+
+
 # ORDINATIONS (DCA) ####
 ord_1 <- 
   site1.inoc.full %>% 
   subset_samples(sample_sums(site1.inoc.full) > 0) %>% 
   transform_sample_counts(function(x){x/sum(x)}) %>%
-  ordinate(method = "DCA",distance = "bray")
+  ordinate(method = "NMDS",distance = "bray")
 inoc_plot_1 <- plot_ordination(site1.inoc.full,ord_1,color = "community") + scale_color_manual(values=pal.discrete[c(5,2)])
-saveRDS(inoc_plot_1,"./Output/figs/ITS_inoc_plot_1.RDS")
+saveRDS(inoc_plot_1,"./Output/figs/18S_inoc_plot_1.RDS")
 
 ord_2 <- 
   site2.inoc.full %>% 
   subset_samples(sample_sums(site2.inoc.full) > 0) %>% 
   transform_sample_counts(function(x){x/sum(x)}) %>% 
-  ordinate(method = "DCA",distance = "unifrac")
+  ordinate(method = "NMDS",distance = "bray")
 inoc_plot_2 <- plot_ordination(site2.inoc.full,ord_2,color = "community") + scale_color_manual(values=pal.discrete[c(5,2)])
-saveRDS(inoc_plot_2,"./Output/figs/ITS_inoc_plot_2.RDS")
+saveRDS(inoc_plot_2,"./Output/figs/18S_inoc_plot_2.RDS")
 
 ord_3 <- 
   site3.inoc.full %>% 
   subset_samples(sample_sums(site3.inoc.full) > 0) %>% 
   transform_sample_counts(function(x){x/sum(x)}) %>% 
-  ordinate(method = "DCA",distance = "unifrac")
+  ordinate(method = "NMDS",distance = "bray")
 inoc_plot_3 <- plot_ordination(site3.inoc.full,ord_3,color = "community") + scale_color_manual(values=pal.discrete[c(5,2)])
-saveRDS(inoc_plot_3,"./Output/figs/ITS_inoc_plot_3.RDS")
+saveRDS(inoc_plot_3,"./Output/figs/18S_inoc_plot_3.RDS")
 
 ord_4 <- 
   site4.inoc.full %>% 
   subset_samples(sample_sums(site4.inoc.full) > 0) %>% 
   transform_sample_counts(function(x){x/sum(x)}) %>% 
-  ordinate(method = "DCA",distance = "unifrac")
+  ordinate(method = "NMDS",distance = "bray")
 inoc_plot_4 <- plot_ordination(site4.inoc.full,ord_4,color = "community") + scale_color_manual(values=pal.discrete[c(5,2)])
-saveRDS(inoc_plot_4,"./Output/figs/ITS_inoc_plot_4.RDS")
+saveRDS(inoc_plot_4,"./Output/figs/18S_inoc_plot_4.RDS")
 
 ord_5 <- 
   site5.inoc.full %>% 
   subset_samples(sample_sums(site5.inoc.full) > 0) %>% 
   transform_sample_counts(function(x){x/sum(x)}) %>% 
-  ordinate(method = "DCA",distance = "unifrac")
+  ordinate(method = "NMDS",distance = "bray")
 inoc_plot_5 <- plot_ordination(site5.inoc.full,ord_5,color = "community") + scale_color_manual(values=pal.discrete[c(5,2)])
-saveRDS(inoc_plot_5,"./Output/figs/ITS_inoc_plot_5.RDS")
+saveRDS(inoc_plot_5,"./Output/figs/18S_inoc_plot_5.RDS")
 
 ord_6 <- 
   site6.inoc.full %>% 
   subset_samples(sample_sums(site6.inoc.full) > 0) %>% 
   transform_sample_counts(function(x){x/sum(x)}) %>% 
-  ordinate(method = "DCA",distance = "unifrac")
+  ordinate(method = "NMDS",distance = "bray")
 inoc_plot_6 <- plot_ordination(site6.inoc.full,ord_6,color = "community") + scale_color_manual(values=pal.discrete[c(5,2)])
-saveRDS(inoc_plot_6,"./Output/figs/ITS_inoc_plot_6.RDS")
+saveRDS(inoc_plot_6,"./Output/figs/18S_inoc_plot_6.RDS")
 
 
 # FIND OVERLAP BETWEEN INOCULUM AND FINAL ####
@@ -318,7 +343,6 @@ fr <-
 output <- 
   list(inoculum_ra = i,
        final_ra = fr)
-
 
 z=site1.inoc.full; successful_1 <- find_remaining_taxa(z)
 z=site2.inoc.full; successful_2 <- find_remaining_taxa(z)
@@ -365,12 +389,12 @@ p5 <- heatmaps_5$inoc + heatmaps_5$final + plot_layout(widths = c((3/4), 3))
 p6 <- heatmaps_6$inoc + heatmaps_6$final + plot_layout(widths = c((3/4), 3))
 
 # save heatmaps
-p1; ggsave("./Output/figs/ITS_inoculum_taxa_heatmaps_inoc-1.png",dpi=300,height = 8,width = 6)
-p2; ggsave("./Output/figs/ITS_inoculum_taxa_heatmaps_inoc-2.png",dpi=300,height = 8,width = 6)
-p3; ggsave("./Output/figs/ITS_inoculum_taxa_heatmaps_inoc-3.png",dpi=300,height = 8,width = 6)
-p4; ggsave("./Output/figs/ITS_inoculum_taxa_heatmaps_inoc-4.png",dpi=300,height = 8,width = 6)
-p5; ggsave("./Output/figs/ITS_inoculum_taxa_heatmaps_inoc-5.png",dpi=300,height = 8,width = 6)
-p6; ggsave("./Output/figs/ITS_inoculum_taxa_heatmaps_inoc-6.png",dpi=300,height = 8,width = 6)
+p1; ggsave("./Output/figs/18S_inoculum_taxa_heatmaps_inoc-1.png",dpi=300,height = 8,width = 6)
+p2; ggsave("./Output/figs/18S_inoculum_taxa_heatmaps_inoc-2.png",dpi=300,height = 8,width = 6)
+p3; ggsave("./Output/figs/18S_inoculum_taxa_heatmaps_inoc-3.png",dpi=300,height = 8,width = 6)
+p4; ggsave("./Output/figs/18S_inoculum_taxa_heatmaps_inoc-4.png",dpi=300,height = 8,width = 6)
+p5; ggsave("./Output/figs/18S_inoculum_taxa_heatmaps_inoc-5.png",dpi=300,height = 8,width = 6)
+p6; ggsave("./Output/figs/18S_inoculum_taxa_heatmaps_inoc-6.png",dpi=300,height = 8,width = 6)
 
 
 
@@ -439,13 +463,13 @@ fung_merged %>%
         axis.text = element_text(face='bold',size=12),
         axis.title = element_text(face='bold',size=12)) +
   labs(x="",y="Relative abundance",title = "Taxonomy of successfully vs \nunsuccessfully transplanted Glomeromycotina ASVs")
-ggsave("./Output/figs/ITS_successful_vs_unsuccessful_taxa_breakdown.png",height = 6, width = 10)
+ggsave("./Output/figs/18S_successful_vs_unsuccessful_taxa_breakdown.png",height = 6, width = 10)
 
 
 data.frame(
   Taxonomy = corncob::otu_to_taxonomy(unsuccessful_asvs,fung),
   ASV = names(corncob::otu_to_taxonomy(unsuccessful_asvs,fung))
-) %>% saveRDS("./Output/ITS_unsuccessful_ASV_transplants.RDS")
+) %>% saveRDS("./Output/18S_unsuccessful_ASV_transplants.RDS")
 
 
 
@@ -462,21 +486,21 @@ ps <- successful_6; mrm_6 <- run_MRM_inoc_final(ps)
 
 # Pull MRM results tables into single table
 MRM_df <- 
-  cbind(inoculum=c("Inoc_1","Inoc_2","Inoc_3","Inoc_4","Inoc_5","Inoc_6"),
+  cbind(inoculum=c("Inoc_1","Inoc_2","Inoc_4"),
         rbind(
           unlist(mrm_1 %>% filter(row.names(.) != "Int")),
           unlist(mrm_2 %>% filter(row.names(.) != "Int")),
-          unlist(mrm_3 %>% filter(row.names(.) != "Int")),
-          unlist(mrm_4 %>% filter(row.names(.) != "Int")),
-          unlist(mrm_5 %>% filter(row.names(.) != "Int")),
-          unlist(mrm_6 %>% filter(row.names(.) != "Int"))) 
-  ) %>% 
+          # unlist(mrm_3 %>% filter(row.names(.) != "Int")),
+          unlist(mrm_4 %>% filter(row.names(.) != "Int"))
+          # unlist(mrm_5 %>% filter(row.names(.) != "Int")),
+          # unlist(mrm_6 %>% filter(row.names(.) != "Int"))) 
+  )) %>% 
   as.data.frame() %>% 
   mutate(coef.final_inoc_dist=as.numeric(coef.final_inoc_dist),
          coef.pval=as.numeric(coef.pval),
          r.squared=as.numeric(r.squared),
          F.test=as.numeric(F.test)) %>% 
   mutate(across(where(is.numeric),function(x){round(x,3)}))
-saveRDS(MRM_df,"./Output/ITS_MRM_stats_table_inoc_vs_final.RDS")
+saveRDS(MRM_df,"./Output/18S_MRM_stats_table_inoc_vs_final.RDS")
 
 

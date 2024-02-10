@@ -34,6 +34,10 @@ set.seed(666)
 # DATA ####
 ps <- readRDS("./Output/ITS_ps_not-cleaned.RDS") # change to non-phylogeny stuff
 
+# clean up wilting_scale
+ps@sam_data$wilting_scale <- (1 / ps@sam_data$wilting_scale)
+
+
 # Remove Non-Fungi
 ps <- ps %>% subset_taxa(Kingdom == "k__Fungi")
 ps@tax_table[,1] %>% unique
