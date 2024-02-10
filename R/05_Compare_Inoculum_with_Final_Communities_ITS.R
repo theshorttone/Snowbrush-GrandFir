@@ -32,12 +32,12 @@ library(zahntools); packageVersion('zahntools')#github: gzahn/zahntools
 set.seed(666)
 
 ## Load Data ####
-site1.inoc.full <- readRDS("Output/phyloseq_objects/ITS_site1.inoc.full.RDS")
-site2.inoc.full <- readRDS("Output/phyloseq_objects/ITS_site2.inoc.full.RDS")
-site3.inoc.full <- readRDS("Output/phyloseq_objects/ITS_site3.inoc.full.RDS")
-site4.inoc.full <- readRDS("Output/phyloseq_objects/ITS_site4.inoc.full.RDS")
-site5.inoc.full <- readRDS("Output/phyloseq_objects/ITS_site5.inoc.full.RDS")
-site6.inoc.full <- readRDS("Output/phyloseq_objects/ITS_site6.inoc.full.RDS")
+site1.inoc.full <- readRDS("Output/phyloseq_objects/18S_site1.inoc.full.RDS")
+site2.inoc.full <- readRDS("Output/phyloseq_objects/18S_site2.inoc.full.RDS")
+site3.inoc.full <- readRDS("Output/phyloseq_objects/18S_site3.inoc.full.RDS")
+site4.inoc.full <- readRDS("Output/phyloseq_objects/18S_site4.inoc.full.RDS")
+site5.inoc.full <- readRDS("Output/phyloseq_objects/18S_site5.inoc.full.RDS")
+site6.inoc.full <- readRDS("Output/phyloseq_objects/18S_site6.inoc.full.RDS")
 
 
 # options and variables
@@ -244,49 +244,82 @@ run_MRM_inoc_final <-
 # ORDINATIONS (DCA) ####
 ord_1 <- 
   site1.inoc.full %>% 
-  transform_sample_counts(function(x){x/sum(x)}) %>% 
-  ordinate(method = "DCA",distance = "unifrac")
+  subset_samples(sample_sums(site1.inoc.full) > 0) %>% 
+  transform_sample_counts(function(x){x/sum(x)}) %>%
+  ordinate(method = "DCA",distance = "bray")
 inoc_plot_1 <- plot_ordination(site1.inoc.full,ord_1,color = "community") + scale_color_manual(values=pal.discrete[c(5,2)])
-saveRDS(inoc_plot_1,"./Output/figs/ITS_inoc_plot_1.RDS")
+saveRDS(inoc_plot_1,"./Output/figs/18S_inoc_plot_1.RDS")
 
 ord_2 <- 
   site2.inoc.full %>% 
+  subset_samples(sample_sums(site2.inoc.full) > 0) %>% 
   transform_sample_counts(function(x){x/sum(x)}) %>% 
   ordinate(method = "DCA",distance = "unifrac")
 inoc_plot_2 <- plot_ordination(site2.inoc.full,ord_2,color = "community") + scale_color_manual(values=pal.discrete[c(5,2)])
-saveRDS(inoc_plot_2,"./Output/figs/ITS_inoc_plot_2.RDS")
+saveRDS(inoc_plot_2,"./Output/figs/18S_inoc_plot_2.RDS")
 
 ord_3 <- 
   site3.inoc.full %>% 
+  subset_samples(sample_sums(site3.inoc.full) > 0) %>% 
   transform_sample_counts(function(x){x/sum(x)}) %>% 
   ordinate(method = "DCA",distance = "unifrac")
 inoc_plot_3 <- plot_ordination(site3.inoc.full,ord_3,color = "community") + scale_color_manual(values=pal.discrete[c(5,2)])
-saveRDS(inoc_plot_3,"./Output/figs/ITS_inoc_plot_3.RDS")
+saveRDS(inoc_plot_3,"./Output/figs/18S_inoc_plot_3.RDS")
 
 ord_4 <- 
   site4.inoc.full %>% 
+  subset_samples(sample_sums(site4.inoc.full) > 0) %>% 
   transform_sample_counts(function(x){x/sum(x)}) %>% 
   ordinate(method = "DCA",distance = "unifrac")
 inoc_plot_4 <- plot_ordination(site4.inoc.full,ord_4,color = "community") + scale_color_manual(values=pal.discrete[c(5,2)])
-saveRDS(inoc_plot_4,"./Output/figs/ITS_inoc_plot_4.RDS")
+saveRDS(inoc_plot_4,"./Output/figs/18S_inoc_plot_4.RDS")
 
 ord_5 <- 
   site5.inoc.full %>% 
+  subset_samples(sample_sums(site5.inoc.full) > 0) %>% 
   transform_sample_counts(function(x){x/sum(x)}) %>% 
   ordinate(method = "DCA",distance = "unifrac")
 inoc_plot_5 <- plot_ordination(site5.inoc.full,ord_5,color = "community") + scale_color_manual(values=pal.discrete[c(5,2)])
-saveRDS(inoc_plot_5,"./Output/figs/ITS_inoc_plot_5.RDS")
+saveRDS(inoc_plot_5,"./Output/figs/18S_inoc_plot_5.RDS")
 
 ord_6 <- 
   site6.inoc.full %>% 
+  subset_samples(sample_sums(site6.inoc.full) > 0) %>% 
   transform_sample_counts(function(x){x/sum(x)}) %>% 
   ordinate(method = "DCA",distance = "unifrac")
 inoc_plot_6 <- plot_ordination(site6.inoc.full,ord_6,color = "community") + scale_color_manual(values=pal.discrete[c(5,2)])
-saveRDS(inoc_plot_6,"./Output/figs/ITS_inoc_plot_6.RDS")
+saveRDS(inoc_plot_6,"./Output/figs/18S_inoc_plot_6.RDS")
 
 
 # FIND OVERLAP BETWEEN INOCULUM AND FINAL ####
 # function is not pulling argument from function call for some reason. Whatever, I'm tired and this works:
+z=site1.inoc.full
+i <- 
+  z %>% 
+  subset_samples(community == "inoculum") %>% 
+  subset_taxa(taxa_sums(z %>% 
+                          subset_samples(community == "inoculum")) > 0) %>% 
+  merge_samples("community",fun = 'sum') %>% 
+  transform_sample_counts(function(x){x/sum(x)})
+i@phy_tree <- NULL
+f <- 
+  z %>% 
+  subset_samples(community == "final") %>% 
+  subset_taxa(taxa_sums(z %>% 
+                          subset_samples(community == "final")) > 0)
+f@phy_tree <- NULL
+r <- taxa_names(f)[which(taxa_names(f) %in% taxa_names(i))]
+fr <- 
+  f %>% 
+  subset_taxa(taxa_names(f) %in% r) 
+fr <- 
+  fr %>% 
+  transform_sample_counts(function(x){x/sum(x)})
+output <- 
+  list(inoculum_ra = i,
+       final_ra = fr)
+
+
 z=site1.inoc.full; successful_1 <- find_remaining_taxa(z)
 z=site2.inoc.full; successful_2 <- find_remaining_taxa(z)
 z=site3.inoc.full; successful_3 <- find_remaining_taxa(z)
@@ -332,12 +365,12 @@ p5 <- heatmaps_5$inoc + heatmaps_5$final + plot_layout(widths = c((3/4), 3))
 p6 <- heatmaps_6$inoc + heatmaps_6$final + plot_layout(widths = c((3/4), 3))
 
 # save heatmaps
-p1; ggsave("./Output/figs/ITS_inoculum_taxa_heatmaps_inoc-1.png",dpi=300,height = 8,width = 6)
-p2; ggsave("./Output/figs/ITS_inoculum_taxa_heatmaps_inoc-2.png",dpi=300,height = 8,width = 6)
-p3; ggsave("./Output/figs/ITS_inoculum_taxa_heatmaps_inoc-3.png",dpi=300,height = 8,width = 6)
-p4; ggsave("./Output/figs/ITS_inoculum_taxa_heatmaps_inoc-4.png",dpi=300,height = 8,width = 6)
-p5; ggsave("./Output/figs/ITS_inoculum_taxa_heatmaps_inoc-5.png",dpi=300,height = 8,width = 6)
-p6; ggsave("./Output/figs/ITS_inoculum_taxa_heatmaps_inoc-6.png",dpi=300,height = 8,width = 6)
+p1; ggsave("./Output/figs/18S_inoculum_taxa_heatmaps_inoc-1.png",dpi=300,height = 8,width = 6)
+p2; ggsave("./Output/figs/18S_inoculum_taxa_heatmaps_inoc-2.png",dpi=300,height = 8,width = 6)
+p3; ggsave("./Output/figs/18S_inoculum_taxa_heatmaps_inoc-3.png",dpi=300,height = 8,width = 6)
+p4; ggsave("./Output/figs/18S_inoculum_taxa_heatmaps_inoc-4.png",dpi=300,height = 8,width = 6)
+p5; ggsave("./Output/figs/18S_inoculum_taxa_heatmaps_inoc-5.png",dpi=300,height = 8,width = 6)
+p6; ggsave("./Output/figs/18S_inoculum_taxa_heatmaps_inoc-6.png",dpi=300,height = 8,width = 6)
 
 
 
@@ -380,7 +413,8 @@ fung_unsuccessful <- fung %>%
 sample_names(fung_unsuccessful) <- paste0(sample_names(fung_unsuccessful),"_U")
 
 fung <- merge_phyloseq(fung_successful,fung_unsuccessful)
-fung@sam_data$success <- rep(c(TRUE,FALSE),each=18)
+fung@sam_data$success <- ifelse(sample_names(fung) %>% grepl(pattern = "_U$"),
+                                FALSE,TRUE)
 
 fung@sam_data$mergevar <- paste0(fung@sam_data$other_frompreviouscolumn,"_", fung@sam_data$success)
 fung_merged <- fung %>% 
@@ -393,7 +427,10 @@ fung_merged@sam_data$site <- sample_names(fung_merged) %>% str_split("_") %>% ma
 fung_merged %>% 
   psmelt() %>% 
   mutate(success=ifelse(success == "FALSE","Unsuccessful","Successful")) %>% 
-  ggplot(aes(x=site,y=Abundance,fill=Class)) +
+  dplyr::filter(Subdivision == "Glomeromycotina") %>% 
+  mutate(Genus = case_when(is.na(Genus) ~ "Uncertain",
+                           TRUE ~ Genus)) %>% 
+  ggplot(aes(x=site,y=Abundance,fill=Genus)) +
   geom_col() +
   coord_flip() +
   facet_wrap(~success) +
@@ -401,18 +438,15 @@ fung_merged %>%
   theme(strip.text = element_text(face='bold',size = 12),
         axis.text = element_text(face='bold',size=12),
         axis.title = element_text(face='bold',size=12)) +
-  labs(x="",y="Relative abundance",title = "Taxonomy of successfully vs \nunsuccessfully transplanted ASVs")
-ggsave("./Output/figs/ITS_successful_vs_unsuccessful_taxa_breakdown.png",height = 6, width = 10)
+  labs(x="",y="Relative abundance",title = "Taxonomy of successfully vs \nunsuccessfully transplanted Glomeromycotina ASVs")
+ggsave("./Output/figs/18S_successful_vs_unsuccessful_taxa_breakdown.png",height = 6, width = 10)
 
 
 data.frame(
   Taxonomy = corncob::otu_to_taxonomy(unsuccessful_asvs,fung),
   ASV = names(corncob::otu_to_taxonomy(unsuccessful_asvs,fung))
-) %>% saveRDS("./Output/ITS_unsuccessful_ASV_transplants.RDS")
+) %>% saveRDS("./Output/18S_unsuccessful_ASV_transplants.RDS")
 
-
-# Annotate phytree ####
-# It would be great to put this info on a phylogenetic tree to see if theres a signal !
 
 
 
@@ -443,6 +477,6 @@ MRM_df <-
          r.squared=as.numeric(r.squared),
          F.test=as.numeric(F.test)) %>% 
   mutate(across(where(is.numeric),function(x){round(x,3)}))
-saveRDS(MRM_df,"./Output/ITS_MRM_stats_table_inoc_vs_final.RDS")
+saveRDS(MRM_df,"./Output/18S_MRM_stats_table_inoc_vs_final.RDS")
 
 
