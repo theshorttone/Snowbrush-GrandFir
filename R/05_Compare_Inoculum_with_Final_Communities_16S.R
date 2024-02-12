@@ -39,6 +39,7 @@ site3.inoc.full <- readRDS("Output/phyloseq_objects/16S_site3.inoc.full.RDS")
 site4.inoc.full <- readRDS("Output/phyloseq_objects/16S_site4.inoc.full.RDS")
 site5.inoc.full <- readRDS("Output/phyloseq_objects/16S_site5.inoc.full.RDS")
 site6.inoc.full <- readRDS("Output/phyloseq_objects/16S_site6.inoc.full.RDS")
+ps <- readRDS("Output/phyloseq_objects/16S_clean_phyloseq_object.RDS")
 
 # options and variables
 theme_set(theme_minimal())
@@ -157,7 +158,7 @@ plot_remaining_heatmap <- function(z, viridis.option='mako'){
   inoc_plot <- 
     z$inoculum %>% 
     ggplot(aes(x=sample,y=taxon_name,fill=rel_abund_transformed)) +
-    geom_tile() +
+    geom_tile(show.legend = FALSE) +
     scale_fill_viridis_c(option = viridis.option) +
     labs(x="",
          y="ASVs")  +
@@ -173,7 +174,7 @@ plot_remaining_heatmap <- function(z, viridis.option='mako'){
   final_plot <- 
     z$pot %>% 
     ggplot(aes(x=sample,y=taxon_name,fill=rel_abund_transformed)) +
-    geom_tile() +
+    geom_tile(show.legend = FALSE) +
     scale_fill_viridis_c(option = viridis.option) +
     labs(x="",y="") +
     theme(axis.text.y = element_blank(),
@@ -239,6 +240,34 @@ run_MRM_inoc_final <-
     return(MRM_results)
 }
 
+plot_sterile_heatmap <- function(comparison){
+  sterile %>% 
+    # tax_glom("Species") %>% 
+    transform_sample_counts(function(x){x/sum(x)}) %>% 
+    psmelt() %>% 
+    mutate(taxon_name = otu_to_taxonomy(OTU,sterile),
+           sample = Sample,
+           rel_abund = Abundance,
+           rel_abund_transformed = rel_abund,
+           inoc_source = inoculum) %>% 
+    select(all_of(remaining_1_p$inoculum %>% names)) %>% 
+    dplyr::filter(taxon_name %in% comparison[["inoculum"]][["taxon_name"]]) %>% 
+    ggplot(aes(x=sample,y=taxon_name,fill=rel_abund_transformed)) +
+    geom_tile() +
+    scale_fill_viridis_c(option = 'mako') +
+    labs(x="",
+         y="ASVs",
+         fill="Relative abundance")  +
+    facet_wrap(~ inoc_source) +
+    theme(axis.text.y = element_blank(),
+          axis.title.y = element_blank(),
+          axis.text.x = element_text(angle=90,hjust=1,vjust=.5),
+          axis.title.x = element_text(face='bold',size=14),
+          legend.position = 'bottom',
+          strip.text = element_text(face='bold',size=10),
+          axis.ticks = element_blank())
+}
+
 
 
 # ORDINATIONS (DCA) ####
@@ -287,6 +316,32 @@ taxa_are_rows(site1.inoc.full)
 
 # FIND OVERLAP BETWEEN INOCULUM AND FINAL ####
 # function is not pulling argument from function call for some reason. Whatever, I'm tired and this works:
+z=site1.inoc.full
+i <- 
+  z %>% 
+  subset_samples(community == "inoculum") %>% 
+  subset_taxa(taxa_sums(z %>% 
+                          subset_samples(community == "inoculum")) > 0) %>% 
+  merge_samples("community",fun = 'sum') %>% 
+  transform_sample_counts(function(x){x/sum(x)})
+i@phy_tree <- NULL
+f <- 
+  z %>% 
+  subset_samples(community == "final") %>% 
+  subset_taxa(taxa_sums(z %>% 
+                          subset_samples(community == "final")) > 0)
+f@phy_tree <- NULL
+r <- taxa_names(f)[which(taxa_names(f) %in% taxa_names(i))]
+fr <- 
+  f %>% 
+  subset_taxa(taxa_names(f) %in% r) 
+fr <- 
+  fr %>% 
+  transform_sample_counts(function(x){x/sum(x)})
+output <- 
+  list(inoculum_ra = i,
+       final_ra = fr)
+
 z=site1.inoc.full; successful_1 <- find_remaining_taxa(z)
 z=site2.inoc.full; successful_2 <- find_remaining_taxa(z)
 z=site3.inoc.full; successful_3 <- find_remaining_taxa(z)
@@ -310,6 +365,13 @@ remaining_5_p <- build_remaining_dfs(successful_5,inoc.site = "5",only.final.tax
 remaining_6_p <- build_remaining_dfs(successful_6,inoc.site = "6",only.final.taxa = TRUE)
 
 
+# COMPARE W/ STERILE INOC POTS ####
+# remove taxa also found in "sterile inoculum" pots
+sterile <- ps %>% 
+  subset_samples(inoculum_site == "Sterile")
+sterile <- sterile %>% 
+  subset_taxa(taxa_sums(sterile) > 0)
+
 
 
 
@@ -323,21 +385,26 @@ heatmaps_4 <- plot_remaining_heatmap(remaining_4_p)
 heatmaps_5 <- plot_remaining_heatmap(remaining_5_p)
 heatmaps_6 <- plot_remaining_heatmap(remaining_6_p)
 
-
-p1 <- heatmaps_1$inoc + heatmaps_1$final + plot_layout(widths = c((3/4), 3))
-p2 <- heatmaps_2$inoc + heatmaps_2$final + plot_layout(widths = c((3/4), 3))
-p3 <- heatmaps_3$inoc + heatmaps_3$final + plot_layout(widths = c((3/4), 3))
-p4 <- heatmaps_4$inoc + heatmaps_4$final + plot_layout(widths = c((3/4), 3))
-p5 <- heatmaps_5$inoc + heatmaps_5$final + plot_layout(widths = c((3/4), 3))
-p6 <- heatmaps_6$inoc + heatmaps_6$final + plot_layout(widths = c((3/4), 3))
+p1 <- heatmaps_1$inoc + plot_sterile_heatmap(comparison = remaining_1_p) + heatmaps_1$final + 
+  plot_layout(widths = c((3/4), 3, 3),guides = 'keep') & theme(legend.position = 'bottom')
+p2 <- heatmaps_2$inoc + plot_sterile_heatmap(comparison = remaining_2_p) + heatmaps_2$final  + 
+  plot_layout(widths = c((3/4), 3, 3),guides = 'keep') & theme(legend.position = 'bottom')
+p3 <- heatmaps_3$inoc + plot_sterile_heatmap(comparison = remaining_3_p) + heatmaps_3$final  + 
+  plot_layout(widths = c((3/4), 3, 3),guides = 'keep') & theme(legend.position = 'bottom')
+p4 <- heatmaps_4$inoc + plot_sterile_heatmap(comparison = remaining_4_p) + heatmaps_4$final  + 
+  plot_layout(widths = c((3/4), 3, 3),guides = 'keep') & theme(legend.position = 'bottom')
+p5 <- heatmaps_5$inoc + plot_sterile_heatmap(comparison = remaining_5_p) + heatmaps_5$final  + 
+  plot_layout(widths = c((3/4), 3, 3),guides = 'keep') & theme(legend.position = 'bottom')
+p6 <- heatmaps_6$inoc + plot_sterile_heatmap(comparison = remaining_6_p) + heatmaps_6$final  + 
+  plot_layout(widths = c((3/4), 3, 3),guides = 'keep') & theme(legend.position = 'bottom')
 
 # save heatmaps
-p1; ggsave("./Output/figs/16S_inoculum_taxa_heatmaps_inoc-1.png",dpi=300,height = 8,width = 6)
-p2; ggsave("./Output/figs/16S_inoculum_taxa_heatmaps_inoc-2.png",dpi=300,height = 8,width = 6)
-p3; ggsave("./Output/figs/16S_inoculum_taxa_heatmaps_inoc-3.png",dpi=300,height = 8,width = 6)
-p4; ggsave("./Output/figs/16S_inoculum_taxa_heatmaps_inoc-4.png",dpi=300,height = 8,width = 6)
-p5; ggsave("./Output/figs/16S_inoculum_taxa_heatmaps_inoc-5.png",dpi=300,height = 8,width = 6)
-p6; ggsave("./Output/figs/16S_inoculum_taxa_heatmaps_inoc-6.png",dpi=300,height = 8,width = 6)
+p1; ggsave("./Output/figs/16S_inoculum_taxa_heatmaps_inoc-1.png",dpi=300,height = 8,width = 12)
+p2; ggsave("./Output/figs/16S_inoculum_taxa_heatmaps_inoc-2.png",dpi=300,height = 8,width = 12)
+p3; ggsave("./Output/figs/16S_inoculum_taxa_heatmaps_inoc-3.png",dpi=300,height = 8,width = 12)
+p4; ggsave("./Output/figs/16S_inoculum_taxa_heatmaps_inoc-4.png",dpi=300,height = 8,width = 12)
+p5; ggsave("./Output/figs/16S_inoculum_taxa_heatmaps_inoc-5.png",dpi=300,height = 8,width = 12)
+p6; ggsave("./Output/figs/16S_inoculum_taxa_heatmaps_inoc-6.png",dpi=300,height = 8,width = 12)
 
 
 
@@ -405,6 +472,22 @@ bact_merged %>%
   labs(x="",y="Relative abundance",title = "Taxonomy of successfully vs \nunsuccessfully transplanted ASVs")
 ggsave("./Output/figs/16S_successful_vs_unsuccessful_taxa_breakdown.png",width = 12,height = 8)
 
+bact_merged %>% 
+  psmelt() %>% 
+  mutate(success=ifelse(success == "FALSE","Unsuccessful","Successful")) %>% 
+  # dplyr::filter(Subdivision == "Glomeromycotina") %>% 
+  mutate(Genus = case_when(is.na(Genus) ~ "Uncertain",
+                           TRUE ~ Genus),
+         Sample = str_remove(Sample,"_TRUE")) %>% 
+  dplyr::filter(success == "Successful") %>% 
+  select(Genus,Sample,Abundance,OTU) %>% 
+  dplyr::filter(Abundance > 0) %>% 
+  group_by(Genus,Sample,OTU) %>% 
+  summarize(Abundance = mean(Abundance)) %>% 
+  arrange(Genus,Sample,desc(Abundance)) %>% 
+  select(Genus,Sample,OTU) %>% 
+  saveRDS("./Output/16S_Successfully_Transplanted_Taxa.RDS")
+
 
 data.frame(
   Taxonomy = corncob::otu_to_taxonomy(unsuccessful_asvs,bact),
@@ -422,11 +505,12 @@ data.frame(
 # MRM ####
 # does initial community predict final community (only taxa found initially in inoculum)?
 
+# some of these fits are singular ...
 ps <- successful_1; mrm_1 <- run_MRM_inoc_final(ps)
-ps <- successful_2; mrm_2 <- run_MRM_inoc_final(ps)
-ps <- successful_3; mrm_3 <- run_MRM_inoc_final(ps)
+# ps <- successful_2; mrm_2 <- run_MRM_inoc_final(ps)
+# ps <- successful_3; mrm_3 <- run_MRM_inoc_final(ps)
 ps <- successful_4; mrm_4 <- run_MRM_inoc_final(ps)
-ps <- successful_5; mrm_5 <- run_MRM_inoc_final(ps)
+# ps <- successful_5; mrm_5 <- run_MRM_inoc_final(ps)
 ps <- successful_6; mrm_6 <- run_MRM_inoc_final(ps)
 
 # Pull MRM results tables into single table

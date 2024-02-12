@@ -10,6 +10,7 @@
 #                     readxl v 1.4.1
 #                     janitor v 2.1.0
 #                     microbiome v 1.20.0
+#                     zahntools v 0.1.0
 # -----------------------------------------------------------------------------#
 
 #################################################################################
@@ -27,6 +28,7 @@ library(adegenet); packageVersion("adegenet")
 library(readxl); packageVersion("readxl")
 library(janitor); packageVersion("janitor")
 library(microbiome); packageVersion("microbiome")
+library(zahntools);packageVersion('zahntools')
 '%ni%' <- Negate('%in%')
 
 # seed
@@ -69,6 +71,12 @@ y %>% group_by(Species) %>% summarize(total=sum(abund)) %>% arrange(desc(total))
   theme(axis.text.x = element_text(angle=60,hjust=1)) +
   labs(y="Relative abundance",title="Fungal positive control sample")
 ggsave("./Output/figs/18S_Fungal_positive_control_taxonomy.png",height = 4,width = 6)
+
+pos %>% 
+  transform_sample_counts(function(x){x/sum(x)}) %>% 
+  plot_bar2(fill = "Genus") +
+  labs(y="Relative abundance")
+ggsave("./Output/figs/18S_Positive_Control_stacked-barchart.png", height = 6, width = 8,dpi=300)
 
 
 # Remove postive control

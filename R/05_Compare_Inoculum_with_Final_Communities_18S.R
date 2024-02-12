@@ -171,7 +171,7 @@ plot_remaining_heatmap <- function(z, viridis.option='mako'){
   inoc_plot <- 
     z$inoculum %>% 
     ggplot(aes(x=sample,y=taxon_name,fill=rel_abund_transformed)) +
-    geom_tile() +
+    geom_tile(show.legend = FALSE) +
     scale_fill_viridis_c(option = viridis.option) +
     labs(x="",
          y="ASVs")  +
@@ -187,7 +187,7 @@ plot_remaining_heatmap <- function(z, viridis.option='mako'){
   final_plot <- 
     z$pot %>% 
     ggplot(aes(x=sample,y=taxon_name,fill=rel_abund_transformed)) +
-    geom_tile() +
+    geom_tile(show.legend = FALSE) +
     scale_fill_viridis_c(option = viridis.option) +
     labs(x="",y="") +
     theme(axis.text.y = element_blank(),
@@ -253,6 +253,34 @@ run_MRM_inoc_final <-
     return(MRM_results)
   }
 
+plot_sterile_heatmap <- function(comparison){
+  sterile %>% 
+    tax_glom("Species") %>% 
+    transform_sample_counts(function(x){x/sum(x)}) %>% 
+    psmelt() %>% 
+    mutate(taxon_name = otu_to_taxonomy(OTU,sterile),
+           sample = Sample,
+           rel_abund = Abundance,
+           rel_abund_transformed = ifelse(rel_abund > quantile(rel_abund,.95,na.rm=TRUE),quantile(rel_abund,.95,na.rm=TRUE),rel_abund),
+           inoc_source = inoculum) %>% 
+    select(all_of(remaining_1_p$inoculum %>% names)) %>% 
+    dplyr::filter(taxon_name %in% comparison[["inoculum"]][["taxon_name"]]) %>% 
+    ggplot(aes(x=sample,y=taxon_name,fill=rel_abund_transformed)) +
+    geom_tile() +
+    scale_fill_viridis_c(option = 'mako') +
+    labs(x="",
+         y="ASVs",
+         fill="Relative abundance")  +
+    facet_wrap(~ inoc_source) +
+    theme(axis.text.y = element_blank(),
+          axis.title.y = element_blank(),
+          axis.text.x = element_text(angle=90,hjust=1,vjust=.5),
+          axis.title.x = element_text(face='bold',size=14),
+          legend.position = 'bottom',
+          strip.text = element_text(face='bold',size=10),
+          axis.ticks = element_blank())
+}
+
 
 # LOAD DATS ####
 ## Load Data ####
@@ -262,7 +290,7 @@ site3.inoc.full <- readRDS("Output/phyloseq_objects/18S_site3.inoc.full.RDS") %>
 site4.inoc.full <- readRDS("Output/phyloseq_objects/18S_site4.inoc.full.RDS") %>% condense_ps_to_species()
 site5.inoc.full <- readRDS("Output/phyloseq_objects/18S_site5.inoc.full.RDS") %>% condense_ps_to_species()
 site6.inoc.full <- readRDS("Output/phyloseq_objects/18S_site6.inoc.full.RDS") %>% condense_ps_to_species()
-
+ps <- readRDS("Output/phyloseq_objects/18S_clean_phyloseq_object.RDS") %>% condense_ps_to_species()
 
 
 
@@ -366,8 +394,22 @@ remaining_4_p <- build_remaining_dfs(successful_4,inoc.site = "4",only.final.tax
 remaining_5_p <- build_remaining_dfs(successful_5,inoc.site = "5",only.final.taxa = TRUE)
 remaining_6_p <- build_remaining_dfs(successful_6,inoc.site = "6",only.final.taxa = TRUE)
 
+# COMPARE W/ STERILE INOC POTS ####
+# remove taxa also found in "sterile inoculum" pots
+sterile <- ps %>% 
+  subset_samples(inoculum_site == "Sterile")
+sterile <- sterile %>% 
+  subset_taxa(taxa_sums(sterile) > 0)
 
 
+
+
+remaining_1_p$inoculum$taxon_name %in% corncob::otu_to_taxonomy( taxa_names(sterile),sterile)
+remaining_2_p$inoculum$taxon_name %in% corncob::otu_to_taxonomy( taxa_names(sterile),sterile)
+remaining_3_p$inoculum$taxon_name %in% corncob::otu_to_taxonomy( taxa_names(sterile),sterile)
+remaining_4_p$inoculum$taxon_name %in% corncob::otu_to_taxonomy( taxa_names(sterile),sterile)
+remaining_5_p$inoculum$taxon_name %in% corncob::otu_to_taxonomy( taxa_names(sterile),sterile)
+remaining_6_p$inoculum$taxon_name %in% corncob::otu_to_taxonomy( taxa_names(sterile),sterile)
 
 
 # PLOT HEATMAPS ####
@@ -380,21 +422,27 @@ heatmaps_4 <- plot_remaining_heatmap(remaining_4_p)
 heatmaps_5 <- plot_remaining_heatmap(remaining_5_p)
 heatmaps_6 <- plot_remaining_heatmap(remaining_6_p)
 
-
-p1 <- heatmaps_1$inoc + heatmaps_1$final + plot_layout(widths = c((3/4), 3))
-p2 <- heatmaps_2$inoc + heatmaps_2$final + plot_layout(widths = c((3/4), 3))
-p3 <- heatmaps_3$inoc + heatmaps_3$final + plot_layout(widths = c((3/4), 3))
-p4 <- heatmaps_4$inoc + heatmaps_4$final + plot_layout(widths = c((3/4), 3))
-p5 <- heatmaps_5$inoc + heatmaps_5$final + plot_layout(widths = c((3/4), 3))
-p6 <- heatmaps_6$inoc + heatmaps_6$final + plot_layout(widths = c((3/4), 3))
+# include heatmaps of taxa also found in pots with sterile inoculum
+p1 <- heatmaps_1$inoc + plot_sterile_heatmap(comparison = remaining_1_p) + heatmaps_1$final + 
+  plot_layout(widths = c((3/4), 3, 3),guides = 'keep') & theme(legend.position = 'bottom')
+p2 <- heatmaps_2$inoc + plot_sterile_heatmap(comparison = remaining_2_p) + heatmaps_2$final  + 
+  plot_layout(widths = c((3/4), 3, 3),guides = 'keep') & theme(legend.position = 'bottom')
+p3 <- heatmaps_3$inoc + plot_sterile_heatmap(comparison = remaining_3_p) + heatmaps_3$final  + 
+  plot_layout(widths = c((3/4), 3, 3),guides = 'keep') & theme(legend.position = 'bottom')
+p4 <- heatmaps_4$inoc + plot_sterile_heatmap(comparison = remaining_4_p) + heatmaps_4$final  + 
+  plot_layout(widths = c((3/4), 3, 3),guides = 'keep') & theme(legend.position = 'bottom')
+p5 <- heatmaps_5$inoc + plot_sterile_heatmap(comparison = remaining_5_p) + heatmaps_5$final  + 
+  plot_layout(widths = c((3/4), 3, 3),guides = 'keep') & theme(legend.position = 'bottom')
+p6 <- heatmaps_6$inoc + plot_sterile_heatmap(comparison = remaining_6_p) + heatmaps_6$final  + 
+  plot_layout(widths = c((3/4), 3, 3),guides = 'keep') & theme(legend.position = 'bottom')
 
 # save heatmaps
-p1; ggsave("./Output/figs/18S_inoculum_taxa_heatmaps_inoc-1.png",dpi=300,height = 8,width = 6)
-p2; ggsave("./Output/figs/18S_inoculum_taxa_heatmaps_inoc-2.png",dpi=300,height = 8,width = 6)
-p3; ggsave("./Output/figs/18S_inoculum_taxa_heatmaps_inoc-3.png",dpi=300,height = 8,width = 6)
-p4; ggsave("./Output/figs/18S_inoculum_taxa_heatmaps_inoc-4.png",dpi=300,height = 8,width = 6)
-p5; ggsave("./Output/figs/18S_inoculum_taxa_heatmaps_inoc-5.png",dpi=300,height = 8,width = 6)
-p6; ggsave("./Output/figs/18S_inoculum_taxa_heatmaps_inoc-6.png",dpi=300,height = 8,width = 6)
+p1; ggsave("./Output/figs/18S_inoculum_taxa_heatmaps_inoc-1.png",dpi=300,height = 8,width = 12)
+p2; ggsave("./Output/figs/18S_inoculum_taxa_heatmaps_inoc-2.png",dpi=300,height = 8,width = 12)
+p3; ggsave("./Output/figs/18S_inoculum_taxa_heatmaps_inoc-3.png",dpi=300,height = 8,width = 12)
+p4; ggsave("./Output/figs/18S_inoculum_taxa_heatmaps_inoc-4.png",dpi=300,height = 8,width = 12)
+p5; ggsave("./Output/figs/18S_inoculum_taxa_heatmaps_inoc-5.png",dpi=300,height = 8,width = 12)
+p6; ggsave("./Output/figs/18S_inoculum_taxa_heatmaps_inoc-6.png",dpi=300,height = 8,width = 12)
 
 
 
@@ -464,6 +512,24 @@ fung_merged %>%
         axis.title = element_text(face='bold',size=12)) +
   labs(x="",y="Relative abundance",title = "Taxonomy of successfully vs \nunsuccessfully transplanted Glomeromycotina ASVs")
 ggsave("./Output/figs/18S_successful_vs_unsuccessful_taxa_breakdown.png",height = 6, width = 10)
+
+fung_merged %>% 
+  psmelt() %>% 
+  mutate(success=ifelse(success == "FALSE","Unsuccessful","Successful")) %>% 
+  dplyr::filter(Subdivision == "Glomeromycotina") %>% 
+  mutate(Genus = case_when(is.na(Genus) ~ "Uncertain",
+                           TRUE ~ Genus),
+         Sample = str_remove(Sample,"_TRUE")) %>% 
+  dplyr::filter(success == "Successful") %>% 
+  select(Species,Sample,Abundance,OTU) %>% 
+  dplyr::filter(Abundance > 0) %>% 
+  group_by(Species,Sample,OTU) %>% 
+  summarize(Abundance = mean(Abundance)) %>% 
+  arrange(Species,Sample,desc(Abundance)) %>% 
+  select(Species,Sample,OTU) %>% 
+  saveRDS("./Output/18S_Successfully_Transplanted_Taxa.RDS")
+
+
 
 
 data.frame(

@@ -47,7 +47,7 @@ host_colors <- pal.discrete[c(7,10)]
 fire_colors <- pal.discrete[c(18,2,14)]
 
 
-# functions
+## functions ####
 '%ni%' <- Negate('%in%')
 
 find_ig_subset_attr <- function(ps.subset,ig.full){
@@ -103,8 +103,15 @@ bact <- bact %>% subset_taxa(taxa_sums(bact) > 0)
 fung <- readRDS("./Output/phyloseq_objects/ITS_clean_phyloseq_object_w_guilds.RDS")
 fung <- fung %>% subset_taxa(taxa_sums(fung) > 0)
 
-# join the two for 'full' microbiome (16S + ITS2)
-full <- merge_phyloseq(bact,fung)
+amf <- readRDS("./Output/phyloseq_objects/18S_clean_phyloseq_object.RDS")
+amf <- amf %>% 
+  subset_taxa(Subdivision == "Glomeromycotina")
+amf <- amf %>% 
+  subset_taxa(taxa_sums(amf) > 0)
+
+
+# join them for 'full' microbiome (16S + ITS2 + 18S)
+full <- merge_phyloseq(bact,fung,amf)
 sample_names(full)
 
 # Barcharts of bact and fung ####
@@ -112,9 +119,12 @@ sample_names(full)
 # merge samples by inoc source for plotting
 bact_merged <- bact %>% merge_samples("inoculum_site")
 fung_merged <- fung %>% merge_samples("inoculum_site")
+amf_merged <- amf %>% merge_samples("inoculum_site")
+
 # repair metadata
 bact_merged@sam_data$inoculum_site <- row.names(bact_merged@sam_data)
 fung_merged@sam_data$inoculum_site <- row.names(fung_merged@sam_data)
+amf_merged@sam_data$inoculum_site <- row.names(amf_merged@sam_data)
 
 # transform to relabund and plot
 phylum_barplot_by_inoc_bact <- 
@@ -131,9 +141,17 @@ fung_merged %>%
   theme_minimal() +
   scale_fill_viridis_d(end=.8,begin=.2) +
   labs(x="Inoculum source",y="Relative abundance",title = "Fungi")
+genus_barplot_by_inoc_amf <- 
+  amf_merged %>% 
+  transform_sample_counts(function(x){x/sum(x)}) %>% 
+  plot_bar2(fill = "Genus") +
+  theme_minimal() +
+  scale_fill_viridis_d(end=.8,begin=.2) +
+  labs(x="Inoculum source",y="Relative abundance",title = "Fungi")
 
 saveRDS(phylum_barplot_by_inoc_bact,"./Output/figs/phylum_barplot_by_inoc_bact.RDS")
 saveRDS(phylum_barplot_by_inoc_fung,"./Output/figs/phylum_barplot_by_inoc_fung.RDS")
+saveRDS(phylum_barplot_by_inoc_amf,"./Output/figs/genus_barplot_by_inoc_amf.RDS")
 
 
 
@@ -169,17 +187,29 @@ se.mb.bact <- SpiecEasi::spiec.easi(data = bact_genus,
 saveRDS(se.mb.bact,"./Output/16S_SpiecEasi_genus_out.RDS")
 se.mb.bact <- readRDS("./Output/16S_SpiecEasi_genus_out.RDS")
 
+# run on amf 
+se.mb.amf <- SpiecEasi::spiec.easi(data = amf,
+                                    method='mb',
+                                    sel.criterion = "bstars",
+                                    pulsar.params=se.params)
+saveRDS(se.mb.amf,"./Output/18S_SpiecEasi_genus_out.RDS")
+se.mb.amf <- readRDS("./Output/18S_SpiecEasi_genus_out.RDS")
+
+
+
 # get best model and build igraph (include vertex names)
 fung_igraph <- adj2igraph(getRefit(se.mb.fung),vertex.attr = list(name=taxa_names(fung)))
 bact_igraph <- adj2igraph(getRefit(se.mb.bact),vertex.attr = list(name=taxa_names(bact_genus)))
+amf_igraph <- adj2igraph(getRefit(se.mb.amf),vertex.attr = list(name=taxa_names(amf)))
 
 # find putative hub taxa & plot for entire study
 fung_hub_taxa <- hubfindr::find_hubs(graph = fung_igraph,physeq = fung)
 bact_hub_taxa <- hubfindr::find_hubs(graph = bact_igraph,physeq = bact)
+amf_hub_taxa <- hubfindr::find_hubs(graph = amf_igraph,physeq = amf)
 
 plot_hubs(fung_igraph)
 plot_hubs(bact_igraph)
-
+plot_hubs(amf_igraph)
 
 # SUBSET NETWORKS ####
 ## Build subsets ####
@@ -247,6 +277,22 @@ bact_gf_6 <- bact_genus %>%
 bact_gf_s <- bact_genus %>% 
   subset_samples(species == "GrandFir" & inoculum_site == 'Sterile')
 
+# AMF
+amf_sb_1 <- amf %>% 
+  subset_samples(species == "Snowbrush" & inoculum_site == '1')
+amf_sb_2 <- amf %>% 
+  subset_samples(species == "Snowbrush" & inoculum_site == '2')
+amf_sb_3 <- amf %>% 
+  subset_samples(species == "Snowbrush" & inoculum_site == '3')
+amf_sb_4 <- amf %>% 
+  subset_samples(species == "Snowbrush" & inoculum_site == '4')
+amf_sb_5 <- amf %>% 
+  subset_samples(species == "Snowbrush" & inoculum_site == '5')
+amf_sb_6 <- amf %>% 
+  subset_samples(species == "Snowbrush" & inoculum_site == '6')
+amf_sb_s <- amf %>% 
+  subset_samples(species == "Snowbrush" & inoculum_site == 'Sterile')
+
 ## Calculate attributes ####
 # function that can handle pulling out these stats
 # for fungal subsets
@@ -273,10 +319,19 @@ for(i in ls(pattern = "bact_gf_")){
   bact_grandfir_graph_stats[[i]] <- stat_list
 }
 
+# for amf subsets
+amf_snowbrush_graph_stats <- list()
+for(i in ls(pattern = "amf_sb_")){
+  stat_list <- find_ig_subset_attr(ps.subset = get(i),ig.full = amf_igraph)
+  amf_snowbrush_graph_stats[[i]] <- stat_list
+}
+
+
 # add all to single object
 full_subset_graphs <- 
 list(fungi=list(grandfir=fung_grandfir_graph_stats,snowbrush=fung_snowbrush_graph_stats),
-     bacteria=list(grandfir=bact_grandfir_graph_stats,snowbrush=bact_snowbrush_graph_stats))
+     bacteria=list(grandfir=bact_grandfir_graph_stats,snowbrush=bact_snowbrush_graph_stats),
+     amf=list(grandfir=NA,snowbrush=amf_snowbrush_graph_stats))
 
 
 # deeply nested list... access as follows:
@@ -315,12 +370,22 @@ b_sb <-
                full_subset_graphs$bacteria$snowbrush %>% 
                  map('deg_dist'))
   )
+a_sb <- 
+  data.frame(domain = "amf",
+             host = "snowbrush",
+             deg_dist = I(
+               full_subset_graphs$amf$snowbrush %>% 
+                 map('deg_dist'))
+  )
+
+
 # stick them together
 deg_dist_df <- 
 f_gf %>% 
   bind_rows(f_sb) %>% 
   bind_rows(b_gf) %>% 
-  bind_rows(b_sb)
+  bind_rows(b_sb) %>% 
+  bind_rows(a_sb)
 deg_dist_df$group <- row.names(deg_dist_df)
 deg_dist_df$inoc <- deg_dist_df$group %>% str_split("_") %>% map_chr(3)
 
@@ -365,6 +430,8 @@ c(
   full_subset_graphs$bacteria$grandfir %>% 
     map_dbl(pluck("max_degree")),
   full_subset_graphs$bacteria$snowbrush %>% 
+    map_dbl(pluck("max_degree")),
+  full_subset_graphs$amf$snowbrush %>% 
     map_dbl(pluck("max_degree"))
 ) %>% 
   as.data.frame()
@@ -387,6 +454,8 @@ n_vertices_df <-
     full_subset_graphs$bacteria$grandfir %>% 
       map_dbl(pluck("n_vertices")),
     full_subset_graphs$bacteria$snowbrush %>% 
+      map_dbl(pluck("n_vertices")),
+    full_subset_graphs$amf$snowbrush %>% 
       map_dbl(pluck("n_vertices"))
   ) %>% 
   as.data.frame()
@@ -406,6 +475,8 @@ n_edges_df <-
     full_subset_graphs$bacteria$grandfir %>% 
       map_dbl(pluck("n_edges")),
     full_subset_graphs$bacteria$snowbrush %>% 
+      map_dbl(pluck("n_edges")),
+    full_subset_graphs$amf$snowbrush %>% 
       map_dbl(pluck("n_edges"))
   ) %>% 
   as.data.frame()
@@ -425,6 +496,8 @@ mean_dist_df <-
     full_subset_graphs$bacteria$grandfir %>% 
       map_dbl(pluck("mean_dist")),
     full_subset_graphs$bacteria$snowbrush %>% 
+      map_dbl(pluck("mean_dist")),
+    full_subset_graphs$amf$snowbrush %>% 
       map_dbl(pluck("mean_dist"))
   ) %>% 
   as.data.frame()
@@ -444,6 +517,8 @@ clique_num_df <-
     full_subset_graphs$bacteria$grandfir %>% 
       map_dbl(pluck("clique_num")),
     full_subset_graphs$bacteria$snowbrush %>% 
+      map_dbl(pluck("clique_num")),
+    full_subset_graphs$amf$snowbrush %>% 
       map_dbl(pluck("clique_num"))
   ) %>% 
   as.data.frame()
@@ -463,6 +538,8 @@ mean_betweenness_df <-
     full_subset_graphs$bacteria$grandfir %>% 
       map_dbl(pluck("mean_betweenness")),
     full_subset_graphs$bacteria$snowbrush %>% 
+      map_dbl(pluck("mean_betweenness")),
+    full_subset_graphs$amf$snowbrush %>% 
       map_dbl(pluck("mean_betweenness"))
   ) %>% 
   as.data.frame()
@@ -483,6 +560,8 @@ mean_closeness_df <-
     full_subset_graphs$bacteria$grandfir %>% 
       map_dbl(pluck("mean_closeness")),
     full_subset_graphs$bacteria$snowbrush %>% 
+      map_dbl(pluck("mean_closeness")),
+    full_subset_graphs$amf$snowbrush %>% 
       map_dbl(pluck("mean_closeness"))
   ) %>% 
   as.data.frame()
@@ -502,6 +581,8 @@ mean_coreness_df <-
     full_subset_graphs$bacteria$grandfir %>% 
       map_dbl(pluck("mean_coreness")),
     full_subset_graphs$bacteria$snowbrush %>% 
+      map_dbl(pluck("mean_coreness")),
+    full_subset_graphs$amf$snowbrush %>% 
       map_dbl(pluck("mean_coreness"))
   ) %>% 
   as.data.frame()
@@ -521,6 +602,8 @@ global_effic_df <-
     full_subset_graphs$bacteria$grandfir %>% 
       map_dbl(pluck("global_effic")),
     full_subset_graphs$bacteria$snowbrush %>% 
+      map_dbl(pluck("global_effic")),
+    full_subset_graphs$amf$snowbrush %>% 
       map_dbl(pluck("global_effic"))
   ) %>% 
   as.data.frame()
@@ -540,6 +623,8 @@ clustering_coeficient_df <-
     full_subset_graphs$bacteria$grandfir %>% 
       map_dbl(pluck("clustering_coeficient")),
     full_subset_graphs$bacteria$snowbrush %>% 
+      map_dbl(pluck("clustering_coeficient")),
+    full_subset_graphs$amf$snowbrush %>% 
       map_dbl(pluck("clustering_coeficient"))
   ) %>% 
   as.data.frame()
@@ -557,30 +642,33 @@ saveRDS(graph_atributes_df,"./Output/network_attributes_grouped.RDS")
 # PLOT ATTRIBUTES ####
 
 # betweenness
-graph_atributes_df %>% 
+p1 <- graph_atributes_df %>% 
   ggplot(aes(x=inoc,y=mean_betweenness,fill=host)) +
   geom_col(position = 'dodge') +
   facet_wrap(~domain) +
   scale_fill_manual(values = host_colors)
 
 # clique number 
-graph_atributes_df %>% 
+p2 <- graph_atributes_df %>% 
   ggplot(aes(x=inoc,y=clique_num,fill=host)) +
   geom_col(position = 'dodge') +
   facet_wrap(~domain) +
   scale_fill_manual(values = host_colors)
 # max degree
-graph_atributes_df %>% 
+p3 <- graph_atributes_df %>% 
   ggplot(aes(x=inoc,y=max_degree,fill=host)) +
   geom_col(position = 'dodge') +
   facet_wrap(~domain) +
   scale_fill_manual(values = host_colors)
 # n edges
-graph_atributes_df %>% 
+p4 <- graph_atributes_df %>% 
   ggplot(aes(x=inoc,y=n_edges,fill=host)) +
   geom_col(position = 'dodge') +
   facet_wrap(~domain) +
   scale_fill_manual(values = host_colors)
+
+(p1 + p2) / (p3 + p4) + plot_layout(guides = 'collect') & theme(legend.position = 'bottom')
+ggsave("./Output/figs/network_attributes_borplots_by_host.png",width = 8,height = 8)
 
 # SINGLE-SAMPLE SUBSETS ####
 # Build list objects with attributes and subgraphs for each sample
@@ -598,7 +686,18 @@ for(i in sample_names(bact_genus)){
   x <- subset_samples(bact_genus,sample_names(bact_genus) == i)
   bacterial_subsets[[i]] <- find_ig_subset_attr(ps.subset = x, ig.full = bact_igraph)
 }
-
+names(bacterial_subsets)
+## AMF subsets ####
+amf_subsets <- list()
+for(i in sample_names(amf)){
+  x <- subset_samples(amf,sample_names(amf) == i)
+  if(sample_sums(x) %>% as.numeric() == 0){
+    amf_subsets[[i]] <- list("ig"=NA,"n_vertices"=NA,"n_edges"=NA,"mean_dist"=NA,"clique_num"=NA,"mean_betweenness"=NA,
+         "mean_closeness"=NA,"mean_coreness"=NA,"deg_dist"=NA,"global_effic"=NA,"similarity_matrix"=NA,
+         "clustering_coeficient"=NA,"max_degree"=NA)
+    next}
+  amf_subsets[[i]] <- find_ig_subset_attr(ps.subset = x, ig.full = amf_igraph)
+}
 
 ## Build data frames ####
 fungal_network_attributes_df <- 
@@ -631,13 +730,33 @@ bacterial_network_attributes_df <-
   ) %>% 
   full_join(bact_genus@sam_data)
 
+amf_network_attributes_df <- 
+  data.frame(sample_name = names(amf_subsets),
+             n_vertices = amf_subsets %>% map_dbl(pluck("n_vertices")),
+             n_edges = amf_subsets %>% map_dbl(pluck("n_edges")),
+             mean_dist = amf_subsets %>% map_dbl(pluck("mean_dist")),
+             clique_num = amf_subsets %>% map_dbl(pluck("clique_num")),
+             mean_betweenness = amf_subsets %>% map_dbl(pluck("mean_betweenness")),
+             mean_closeness = amf_subsets %>% map_dbl(pluck("mean_closeness")),
+             mean_coreness = amf_subsets %>% map_dbl(pluck("mean_coreness")),
+             global_effic = amf_subsets %>% map_dbl(pluck("global_effic")),
+             clustering_coeficient = amf_subsets %>% map_dbl(pluck("clustering_coeficient")),
+             max_degree = amf_subsets %>% map_dbl(pluck("max_degree"))
+  ) %>% 
+  full_join(amf@sam_data)
+amf_network_attributes_df$block <- as.character(amf_network_attributes_df$block)
+amf_network_attributes_df$inoculum_burn_freq <- as.character(amf_network_attributes_df$inoculum_burn_freq)
+
+
 full_network_attributes_df <- 
 bacterial_network_attributes_df  %>%
   mutate(block = as.character(block)) %>% 
   mutate(inoculum_burn_freq = ordered(inoculum_burn_freq,levels = c("0","1","3"))) %>% 
   bind_rows(fungal_network_attributes_df) %>% 
+  bind_rows(amf_network_attributes_df) %>% 
   mutate(kingdom = case_when(amplicon == "16S" ~ "Bacteria",
-                             amplicon == "ITS2" ~ "Fungi"))
+                             amplicon == "ITS2" ~ "Fungi",
+                             amplicon == "18S" ~ "AMF"))
 
 
 ## Plot attributes ####
@@ -666,6 +785,7 @@ attribute_plots$n_vertices + attribute_plots$n_edges + attribute_plots$mean_dist
   attribute_plots$mean_closeness + attribute_plots$mean_coreness + attribute_plots$global_effic + attribute_plots$clustering_coeficient + attribute_plots$max_degree +
   patchwork::plot_layout(guides = 'collect',nrow = 5) +
   patchwork::plot_annotation(title = "Community network properties")
+attribute_multiplot
 
 # save plot for later (Supplementary Info)
 saveRDS(attribute_multiplot,"./Output/figs/Network_Attributes_Plot_by_host-inoc-kingdom.RDS")
@@ -717,11 +837,12 @@ saveRDS(attribute_multiplot,"./Output/figs/Network_Attributes_vs_Plant_Health.RD
 mod_full <- 
   glm(data = full_network_attributes_df_long,
       formula = plant_health_indicator ~ species * kingdom *
-        n_vertices + n_edges + mean_dist + mean_betweenness + mean_closeness + global_effic + clustering_coeficient + max_degree)
+        (n_vertices + n_edges + mean_dist + mean_betweenness + mean_closeness + global_effic + clustering_coeficient + max_degree))
 mod_full %>% summary
 
 saveRDS(mod_full,"./Output/Model_Network_Attributes_vs_Plant_Health.RDS")
-
+broom::tidy(mod_full) %>% 
+  dplyr::filter(p.value < 0.05)
 
 # PLOT NETWORKS ####
 
@@ -731,15 +852,18 @@ full_network_attributes_df$igraph <-
 c(fungal_subsets %>% 
   map(pluck("ig")),
   bacterial_subsets %>% 
+    map(pluck("ig")),
+  amf_subsets %>% 
     map(pluck("ig")))
 
 # Save all plots to external image files
-
+dir.create("./Output/figs/igraphs")
 # remove empty rows
 full_network_attributes_df[full_network_attributes_df$sample_name == "F-R-081",'igraph']
 dev.off()
 for(i in 1:nrow(full_network_attributes_df)){
   ig <- full_network_attributes_df$igraph[[i]]
+  if(any(is.na(ig))){next}
   p.title <- paste0(full_network_attributes_df$species[i], " - ",
                     full_network_attributes_df$kingdom[i], " - ",
                     "Inoc: ",full_network_attributes_df$inoculum_site[i], " - ",
@@ -763,12 +887,100 @@ for(i in 1:nrow(full_network_attributes_df)){
 
 
 # HUB TAXA ####
-bact_hub_taxa
-fung_hub_taxa
+bact_hub_taxa$vertex_id
+fung_hub_taxa$vertex_id
+amf_hub_taxa$vertex_id
+
+hub_ps_bact <- 
+bact %>% 
+  subset_taxa(taxa_names(bact) %in% bact_hub_taxa$vertex_id)
+hub_ps_fung <- 
+fung %>% 
+  subset_taxa(taxa_names(fung) %in% fung_hub_taxa$vertex_id)
+hub_ps_amf <- 
+amf %>% 
+  subset_taxa(taxa_names(amf) %in% amf_hub_taxa$vertex_id)
+
 
 # Look at (relative) abundance of hub taxa vs plant health
 
-# STOPPED HERE Jan 28 ###################################################
+# add # of hub taxa present to metadata
+bact@sam_data$hubs_bact <- 
+  hub_ps_bact %>% 
+  estimate_richness(measures = "Observed") %>% 
+  rename("bact_hub_taxa" = "Observed") %>% 
+  mutate(sample_name = row.names(.)) %>% 
+  pluck("bact_hub_taxa")
+
+fung@sam_data$hubs_fung <- 
+  hub_ps_fung %>% 
+  estimate_richness(measures = "Observed") %>% 
+  rename("fung_hub_taxa" = "Observed") %>% 
+  mutate(sample_name = row.names(.)) %>% 
+  pluck("fung_hub_taxa")
+
+amf@sam_data$hubs_amf <- 
+  hub_ps_amf %>% 
+  estimate_richness(measures = "Observed") %>% 
+  rename("amf_hub_taxa" = "Observed") %>% 
+  mutate(sample_name = row.names(.)) %>% 
+  pluck("amf_hub_taxa")
+
+b <- 
+  bact %>% 
+  microbiome::meta() %>% 
+  select(amplicon, sample_name, drought, fire_freq, block,wilting_scale, bud_number, leaf_number, leaf_length,
+         height, nodule_num, shoot_dm, final_root_dm,starts_with("hub")) %>% 
+  mutate(block=as.character(block)) %>% 
+  mutate(hub_count = hubs_bact) 
+
+f <- 
+  fung %>% 
+  microbiome::meta() %>% 
+  select(amplicon, sample_name, drought, fire_freq, block,wilting_scale, bud_number, leaf_number, leaf_length,
+         height, nodule_num, shoot_dm, final_root_dm,starts_with("hub")) %>% 
+  mutate(block=as.character(block)) %>% 
+  mutate(hub_count = hubs_fung)
+
+a <- 
+  amf %>% 
+  microbiome::meta() %>% 
+  select(amplicon, sample_name, drought, fire_freq, block,wilting_scale, bud_number, leaf_number, leaf_length,
+         height, nodule_num, shoot_dm, final_root_dm,starts_with("hub")) %>% 
+  mutate(block=as.character(block)) %>% 
+  mutate(hub_count = hubs_amf)
+
+hubs_and_plants_df <- 
+  full_join(b,f) %>% 
+  full_join(a)
+
+# set up variables
+variables <- names(sample_data(bact))
+plant_measures <- c("wilting_scale","bud_number","leaf_number","leaf_length","height")
+soil_variables <- grep("mean_",variables,value=TRUE)  
+predictors <- c("drought","inoculum_site","fire_freq","host")
+
+
+p <- hubs_and_plants_df %>% 
+mutate(across(all_of(plant_measures),compositions::scale)) %>%
+  pivot_longer(all_of(plant_measures),names_to = "plant_measure") %>% 
+  dplyr::filter(plant_measure != "bud_number") %>% 
+  ggplot(aes(x=hub_count,y=value,color=drought)) +
+  geom_point(alpha=.25) +
+  geom_smooth(method = 'lm',se=FALSE) +
+  facet_wrap(~amplicon*plant_measure) +
+  scale_color_manual(values = drought_colors)
+saveRDS(p, file="./Output/figs/Hub_Taxa_vs_Plant_Health.RDS")
+p <- readRDS("./Output/figs/Hub_Taxa_vs_Plant_Health.RDS")
+
+
+# full_hubs <- 
+# full %>% 
+#   subset_taxa(taxa_names(full) %in% c(bact_hub_taxa$vertex_id,fung_hub_taxa$vertex_id,amf_hub_taxa$vertex_id))
+# 
+# plot_bar2(full_hubs,fill="Kingdom")
+
+# STOPPED HERE Feb 12 ###################################################
 
 
 # Run Specieasi for each marker and inoculum source combination
