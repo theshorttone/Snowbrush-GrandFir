@@ -218,7 +218,7 @@ plant_measures_plot <- microbiome::meta(ps) %>%
   pivot_longer(all_of(plant_measures),names_to = "plant_measure") %>% 
   dplyr::filter(plant_measure != "bud_number") %>% 
   ggplot(aes(x=inoculum_site,y=value,fill=drought)) +
-  geom_violin() +
+  geom_boxplot() +
   facet_wrap(~host*plant_measure,scales = 'free',nrow = 2) +
   scale_fill_manual(values=pal.discrete[c(2,5)]) +
   theme(strip.text.x = element_text(face='bold.italic'),
@@ -226,6 +226,7 @@ plant_measures_plot <- microbiome::meta(ps) %>%
         legend.title = element_text(face='bold')) +
   labs(fill="Drought")
 saveRDS(plant_measures_plot,"./Output/figs/Plant_Health_Measures_Plot.RDS")
+
 ## model ####
 microbiome::meta(ps) %>% 
   mutate(across(all_of(plant_measures),compositions::scale)) %>%
@@ -256,6 +257,46 @@ alpha_long_transformed <-
 
 
 ## plots ####
+
+# Barplots
+# make samples ordered by site
+x <- data.frame(site=ps@sam_data$inoculum_site,
+                sample=ps@sam_data$sample_name) %>% 
+  arrange(site)
+
+sample_order <- 
+  x %>% 
+  pluck("sample")
+
+break_points <- 
+  x %>% group_by(site) %>% 
+  summarize(break_point = tail(sample,1)) %>% 
+  pluck("break_point")
+
+# melt to data frame for plotting
+rank_names(ps)
+melted <- 
+  ps %>% 
+  # subset_taxa(Kingdom == "Bacteria") %>% 
+  transform_sample_counts(function(x){x/sum(x)}) %>% 
+  psmelt()
+
+# plot bar chart
+p <- 
+  melted %>% 
+  mutate(Sample = factor(Sample,levels=sample_order),
+         Genus = ifelse(is.na(Genus),"Undetermined",Genus),
+         inoculum_site = factor(inoculum_site, levels= c("Sterile",as.character(1:6)))) %>% 
+  ggplot(aes(x=Sample,y=Abundance,fill=Phylum)) +
+  geom_col() +
+  facet_wrap(~inoculum_site,nrow = 1,scales = 'free_x') +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle=90,hjust=1,vjust=.5,size=6),
+        strip.background = element_blank(),
+        strip.text = element_text(face='bold',size=12)) +
+  scale_fill_viridis_d() 
+p
+saveRDS(p,"./Output/figs/16S_Barplot_Phylum.RDS")
 
 ### drought ####
 p <- 
@@ -311,14 +352,15 @@ alpha_long_transformed %>%
   ggplot(aes(x=Shannon,y=overall_transformed_plant_value)) + geom_point()
 
 alpha_mod <- alpha_long_transformed %>% 
-  lmer(formula = overall_transformed_plant_value ~ Shannon * host * drought * fire_freq + (1|block/inoculum_site),
+  lmer(formula = overall_transformed_plant_value ~ Shannon * host * drought * inoculum_site + (1|block),
        data = .)
 summary(alpha_mod)
+saveRDS(alpha_mod,"./Output/16S_alpha_diversity_lmermod_model.RDS")
 saveRDS(broom.mixed::tidy(alpha_mod),"./Output/16S_alpha_diversity_lmermod_table.RDS")
 
 alpha_df %>% 
   mutate(height = scale(height)) %>% 
-  lmer(formula = height ~ Shannon * host * drought * fire_freq + (1|block/inoculum_site), data = .) %>% 
+  lmer(formula = height ~ Shannon * host * drought * inoculum_site + (1|block), data = .) %>% 
   summary()
 
 

@@ -255,7 +255,45 @@ alpha_long_transformed <-
 
 
 ## plots ####
+# Barplots
+# make samples ordered by site
+x <- data.frame(site=ps@sam_data$inoculum_site,
+                sample=ps@sam_data$sample_name) %>% 
+  arrange(site)
 
+sample_order <- 
+  x %>% 
+  pluck("sample")
+
+break_points <- 
+  x %>% group_by(site) %>% 
+  summarize(break_point = tail(sample,1)) %>% 
+  pluck("break_point")
+
+# melt to data frame for plotting
+rank_names(ps)
+melted <- 
+  ps %>% 
+  # subset_taxa(Kingdom == "Bacteria") %>% 
+  transform_sample_counts(function(x){x/sum(x)}) %>% 
+  psmelt()
+
+# plot bar chart
+p <- 
+  melted %>% 
+  mutate(Sample = factor(Sample,levels=sample_order),
+         Genus = ifelse(is.na(Genus),"Undetermined",Genus),
+         inoculum_site = factor(inoculum_site, levels= c("Sterile",as.character(1:6)))) %>% 
+  ggplot(aes(x=Sample,y=Abundance,fill=Class)) +
+  geom_col() +
+  facet_wrap(~inoculum_site,nrow = 1,scales = 'free_x') +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle=90,hjust=1,vjust=.5,size=6),
+        strip.background = element_blank(),
+        strip.text = element_text(face='bold',size=12)) +
+  scale_fill_viridis_d() 
+p
+saveRDS(p,"./Output/figs/ITS_Barplot_Class.RDS")
 ### drought ####
 p <- 
 alpha_long_transformed %>%
@@ -309,14 +347,14 @@ alpha_long_transformed %>%
   ggplot(aes(x=Shannon,y=overall_transformed_plant_value)) + geom_point()
 
 alpha_mod <- alpha_long_transformed %>% 
-  lmer(formula = overall_transformed_plant_value ~ Shannon * host * drought * fire_freq + (1|block/inoculum_site),
+  lmer(formula = overall_transformed_plant_value ~ Shannon * host * drought * inoculum_site + (1|block),
        data = .)
 summary(alpha_mod)
 saveRDS(broom.mixed::tidy(alpha_mod),"./Output/ITS_alpha_diversity_lmermod_table.RDS")
 
 alpha_df %>% 
   mutate(height = scale(height)) %>% 
-  lmer(formula = height ~ Shannon * host * drought * fire_freq + (1|block/inoculum_site), data = .) %>% 
+  lmer(formula = height ~ Shannon * host * drought * inoculum_site + (1|block), data = .) %>% 
   summary()
 
 

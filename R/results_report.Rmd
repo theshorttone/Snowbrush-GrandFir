@@ -12,7 +12,8 @@ library(patchwork)
 library(kableExtra)
 library(phyloseq)
 library(zahntools)
-# setwd("../R/")
+library(mgcv)
+# setwd("./R/")
 theme_set(theme_bw())
 ```
 
@@ -27,14 +28,14 @@ theme_set(theme_bw())
 
 ```{r, fig.width=10, fig.height=6}
 p <- readRDS("../Output/figs/Plant_Health_Measures_Plot.RDS")
-
+p
 ```
 
 
 **Model output**
 
 
-Formula: `value ~ drought * host * fire_freq + (1|inoculum_site/block))`
+Formula: `value ~ drought * host * site + (1|block))`
 ```{r}
 
 df <- readRDS("../Output/Plant_Health_Measures_Overview_Model_table.RDS")
@@ -68,7 +69,8 @@ site3.inoc.full <- readRDS("../Output/phyloseq_objects/16S_site3.inoc.RDS")
 site4.inoc.full <- readRDS("../Output/phyloseq_objects/16S_site4.inoc.RDS")
 site5.inoc.full <- readRDS("../Output/phyloseq_objects/16S_site5.inoc.RDS")
 site6.inoc.full <- readRDS("../Output/phyloseq_objects/16S_site6.inoc.RDS")
-
+sterile.full <- readRDS("../Output/phyloseq_objects/16S_clean_phyloseq_object_w_guilds.RDS") %>% 
+  subset_samples(inoculum_site == "Sterile")
 
 site1.inoc.full@phy_tree <- NULL
 site2.inoc.full@phy_tree <- NULL
@@ -76,7 +78,7 @@ site3.inoc.full@phy_tree <- NULL
 site4.inoc.full@phy_tree <- NULL
 site5.inoc.full@phy_tree <- NULL
 site6.inoc.full@phy_tree <- NULL
-
+sterile.full@phy_tree <- NULL
 bact_inoc <- merge_phyloseq(site1.inoc.full,site2.inoc.full,site3.inoc.full,site4.inoc.full,site5.inoc.full,site6.inoc.full)
 bact_inoc <- bact_inoc %>% 
   subset_samples(!is.na("other_frompreviouscolumn"))
@@ -98,10 +100,16 @@ readRDS("../Output/figs/16S_Shannon_vs_plant_site.RDS")
 readRDS("../Output/figs/16S_Shannon_vs_plant_burnfreq.RDS")
 readRDS("../Output/figs/16S_Shannon_vs_plant_drought.RDS")
 
-readRDS("../Output/16S_alpha_diversity_lmermod_table.RDS") %>% 
+m <- readRDS("../Output/16S_alpha_diversity_lmermod_model.RDS") 
+formula(m)
+
+df <- readRDS("../Output/16S_alpha_diversity_lmermod_table.RDS") 
+df %>% 
   mutate(across(where(is.numeric),function(x){round(x,3)})) %>% 
   kable() %>% kable_classic(lightable_options = 'hover') %>% 
+  row_spec(which(df$p.value <= 0.05), bold=TRUE) %>% 
   scroll_box(width = '100%',height = '400px')
+
 ```
 
 
@@ -114,6 +122,7 @@ site3.inoc.full <- readRDS("../Output/phyloseq_objects/ITS_site3.inoc.RDS")
 site4.inoc.full <- readRDS("../Output/phyloseq_objects/ITS_site4.inoc.RDS")
 site5.inoc.full <- readRDS("../Output/phyloseq_objects/ITS_site5.inoc.RDS")
 site6.inoc.full <- readRDS("../Output/phyloseq_objects/ITS_site6.inoc.RDS")
+
 
 bact_inoc <- merge_phyloseq(site1.inoc.full,site2.inoc.full,site3.inoc.full,site4.inoc.full,site5.inoc.full,site6.inoc.full)
 bact_inoc <- bact_inoc %>% 
@@ -128,6 +137,9 @@ bact_inoc %>%
 
 ```
 
+
+
+
 **Alpha diversity**
 
 Effect of Shannon diversity on plant measures
@@ -137,12 +149,59 @@ readRDS("../Output/figs/ITS_Shannon_vs_plant_site.RDS")
 readRDS("../Output/figs/ITS_Shannon_vs_plant_burnfreq.RDS")
 readRDS("../Output/figs/ITS_Shannon_vs_plant_drought.RDS")
 
-readRDS("../Output/ITS_alpha_diversity_lmermod_table.RDS") %>% 
+
+formula(m)
+df <- readRDS("../Output/ITS_alpha_diversity_lmermod_table.RDS") 
+df %>% 
   mutate(across(where(is.numeric),function(x){round(x,3)})) %>% 
   kable() %>% kable_classic(lightable_options = 'hover') %>% 
+  row_spec(which(df$p.value <= 0.05), bold=TRUE) %>% 
   scroll_box(width = '100%',height = '400px')
 ```
 
+### **AMF**
+
+```{r}
+site1.inoc.full <- readRDS("../Output/phyloseq_objects/18S_site1.inoc.RDS")
+site2.inoc.full <- readRDS("../Output/phyloseq_objects/18S_site2.inoc.RDS")
+site3.inoc.full <- readRDS("../Output/phyloseq_objects/18S_site3.inoc.RDS")
+site4.inoc.full <- readRDS("../Output/phyloseq_objects/18S_site4.inoc.RDS")
+site5.inoc.full <- readRDS("../Output/phyloseq_objects/18S_site5.inoc.RDS")
+site6.inoc.full <- readRDS("../Output/phyloseq_objects/18S_site6.inoc.RDS")
+
+
+bact_inoc <- merge_phyloseq(site1.inoc.full,site2.inoc.full,site3.inoc.full,site4.inoc.full,site5.inoc.full,site6.inoc.full)
+bact_inoc <- bact_inoc %>% 
+  subset_samples(!is.na("other_frompreviouscolumn"))
+bact_inoc %>% 
+  subset_taxa(taxa_sums(bact_inoc) > 0 & Subdivision == "Glomeromycotina") %>% 
+  merge_samples("other_frompreviouscolumn") %>% 
+  transform_sample_counts(function(x){x/sum(x)}) %>% 
+  plot_bar2(fill="Order") +
+  scale_fill_viridis_d()
+
+```
+
+**Alpha diversity**
+
+Effect of Shannon diversity on plant measures
+
+
+```{r}
+readRDS("../Output/figs/18S_Shannon_vs_plant_site.RDS")
+readRDS("../Output/figs/18S_Shannon_vs_plant_burnfreq.RDS")
+readRDS("../Output/figs/18S_Shannon_vs_plant_drought.RDS")
+
+formula(m)
+df <- readRDS("../Output/18S_alpha_diversity_lmermod_table.RDS") 
+df %>% 
+  mutate(across(where(is.numeric),function(x){round(x,3)})) %>% 
+  kable() %>% kable_classic(lightable_options = 'hover') %>% 
+  row_spec(which(df$p.value <= 0.05), bold=TRUE) %>% 
+  scroll_box(width = '100%',height = '400px')
+```
+
+___
 
 ## **Comparison between inoculum and root communities**
 
@@ -159,6 +218,13 @@ p6 <- readRDS("../Output/figs/16S_inoc_plot_6.RDS") + labs(title = "Inoculum 6")
 (p1 + p2 + p3) / (p4 + p5 + p6) + patchwork::plot_layout(guides='collect')
 ```
 
+
+```{r}
+readRDS("../Output/figs/16S_Barplot_Phylum.RDS") + labs(title = "Root 16S Overview")
+```
+
+<br>
+
 **Not all taxa in the inoculae were subsequently found in the root samples**
 
 ```{r}
@@ -166,6 +232,7 @@ include_graphics("../Output/figs/16S_successful_vs_unsuccessful_taxa_breakdown.p
 
 ```
 
+<br>
 
 
 
@@ -182,12 +249,48 @@ p6 <- readRDS("../Output/figs/ITS_inoc_plot_6.RDS") + labs(title = "Inoculum 6")
 (p1 + p2 + p3) / (p4 + p5 + p6) + patchwork::plot_layout(guides='collect')
 ```
 
+
+
+
+```{r}
+readRDS("../Output/figs/ITS_Barplot_Class.RDS") + labs(title = "Root ITS Overview")
+```
+
+<br>
+**Not all taxa in the inoculae were subsequently found in the root samples**
+
 ```{r}
 include_graphics("../Output/figs/ITS_successful_vs_unsuccessful_taxa_breakdown.png")
 ```
 
 
 <br>
+
+### **AMF**
+
+```{r}
+p1 <- readRDS("../Output/figs/18S_inoc_plot_1.RDS") + labs(title = "Inoculum 1")
+p2 <- readRDS("../Output/figs/18S_inoc_plot_2.RDS") + labs(title = "Inoculum 2")
+p3 <- readRDS("../Output/figs/18S_inoc_plot_3.RDS") + labs(title = "Inoculum 3")
+p4 <- readRDS("../Output/figs/18S_inoc_plot_4.RDS") + labs(title = "Inoculum 4")
+p5 <- readRDS("../Output/figs/18S_inoc_plot_5.RDS") + labs(title = "Inoculum 5")
+p6 <- readRDS("../Output/figs/18S_inoc_plot_6.RDS") + labs(title = "Inoculum 6")
+
+(p1 + p2 + p3) / (p4 + p5 + p6) + patchwork::plot_layout(guides='collect')
+```
+
+
+
+```{r}
+readRDS("../Output/figs/18S_Barplot_Genus.RDS") + labs(title = "Root AMF Overview")
+```
+<br>
+**Not all taxa in the inoculae were subsequently found in the root samples**
+
+```{r}
+include_graphics("../Output/figs/18S_successful_vs_unsuccessful_taxa_breakdown.png")
+```
+
 
 ___
 
@@ -214,10 +317,17 @@ p4
 ```
   
 ```{r}
-readRDS("../Output/16S_Guild_Model_Output.RDS") %>% 
+df <- readRDS("../Output/16S_Guild_Model_Output.RDS") 
+m <- readRDS("../Output/16S_Pathogen_Model_Snowbrush.RDS")
+
+formula(m)
+
+df %>% 
   # arrange(species) %>% 
   kable %>% 
-  kable_classic(lightable_options = 'hover')
+  kable_classic(lightable_options = 'hover') %>% 
+  row_spec(which(df$p.value <= 0.05), bold=TRUE) 
+
 ```
 
 
@@ -258,9 +368,11 @@ p4 + ggtitle("Snowbrush")
 
 
 ```{r}
-readRDS("../Output/ITS_Guild_Model_Output.RDS") %>% 
+df <- readRDS("../Output/ITS_Guild_Model_Output.RDS") 
+df %>% 
   # arrange(species) %>% 
   kable %>% 
+  row_spec(which(df$p.value <= 0.05), bold=TRUE) %>% 
   kable_classic(lightable_options = 'hover')
 ```
 
@@ -301,6 +413,20 @@ readRDS("../Output/figs/ITS_Ordination_Plots_Fire.RDS") + theme(legend.position 
 cat("PermANOVA run without outlier Sterile-inoculum root samples...")
 
 readRDS("../Output/ITS_Permanova_Table.RDS") %>% 
+  kable() %>% kable_classic(lightable_options = 'hover')
+```
+
+## **AMF**
+
+```{r, fig.width=8,fig.height=6}
+# readRDS("../Output/figs/18S_Ordination_Plots_Host.RDS") + theme(legend.position = 'bottom')
+readRDS("../Output/figs/18S_Ordination_Plots_Drought.RDS") + theme(legend.position = 'bottom')
+readRDS("../Output/figs/18S_Ordination_Plots_Fire.RDS") + theme(legend.position = 'bottom')
+readRDS("../Output/figs/18S_Ordination_Plots_Site.RDS") + theme(legend.position = 'bottom')
+
+cat("PermANOVA run without outlier Sterile-inoculum root samples...")
+
+readRDS("../Output/18S_Permanova_Table.RDS") %>% 
   kable() %>% kable_classic(lightable_options = 'hover')
 ```
 
@@ -365,6 +491,32 @@ readRDS("../Output/figs/ITS_Important_Taxa_Abundances_drought.RDS")
 
 <br>
 
+## **AMF**
+
+
+
+### **Differential Abundance**
+
+```{r,fig.width=12,fig.height=6}
+include_graphics("../Output/figs/18S_BBDML_Plot.png")
+
+```
+
+**No fungal taxa were found to have significant differential abundance between drought levels**
+
+### **Relative Abundances of 'important' taxa in root samples**
+
+```{r, fig.width=12,fig.height=8}
+readRDS("../Output/figs/18S_Important_Taxa_Abundances_site.RDS")
+readRDS("../Output/figs/18S_Important_Taxa_Abundances_fire.RDS")
+readRDS("../Output/figs/18S_Important_Taxa_Abundances_drought.RDS")
+
+
+```
+
+
+<br>
+
 ___
 
 <br>
@@ -407,10 +559,11 @@ readRDS("../Output/figs/Network_Attributes_Plot_by_host-inoc-kingdom.RDS")
 
 ```{r}
 net_mod <- readRDS("../Output/Model_Network_Attributes_vs_Plant_Health.RDS")
+net_mod$formula
 ```
 
 
-`r net_mod$formula`
+
 
 
 ```{r}

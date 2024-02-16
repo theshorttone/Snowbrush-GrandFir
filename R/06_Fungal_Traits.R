@@ -40,7 +40,7 @@ clean_model_df <- function(x){
 '%ni%' <- Negate('%in%')
 
 # load data
-fung <- readRDS("./Output/ITS_clean_phyloseq_object.RDS")
+fung <- readRDS("./Output/phyloseq_objects/ITS_clean_phyloseq_object.RDS")
 fung@sam_data %>% row.names()
 
 # BUILD DATABASES ####
@@ -447,7 +447,7 @@ mutualism_glm_grandfir <-
                  "leaf_length","height","shoot_dm","final_root_dm"),
                names_to="indicator") %>% 
   lmer(data=.,
-      formula=value ~ proportion_mutualist * drought * fire_freq + (1|block))
+      formula=value ~ proportion_mutualist * drought * inoculum_site + (1|block))
 summary(mutualism_glm_grandfir)
 saveRDS(mutualism_glm_grandfir,"./Output/figs/ITS_Mutualist_Model_GrandFir.RDS")
 
@@ -461,7 +461,7 @@ guild_df %>%
                  "leaf_length","height","shoot_dm","final_root_dm"),
                names_to="indicator") %>% 
   lmer(data=.,
-       formula=value ~ proportion_mutualist * drought * fire_freq + (1|block))
+       formula=value ~ proportion_mutualist * drought * inoculum_site + (1|block))
 summary(mutualism_glm_snowbrush)
 saveRDS(mutualism_glm_snowbrush,"./Output/ITS_Mutualist_Model_Snowbrush.RDS")
 
@@ -475,7 +475,7 @@ grandfir_pathogen_glm <-
                  "leaf_length","height","shoot_dm","final_root_dm"),
                names_to="indicator") %>% 
   lmer(data=.,
-       formula=value ~ proportion_pathogen * drought * fire_freq + (1|block))
+       formula=value ~ proportion_pathogen * drought * inoculum_site + (1|block))
 summary(grandfir_pathogen_glm)
 saveRDS(grandfir_pathogen_glm,"./Output/ITS_Pathogen_Model_GrandFir.RDS")
 
@@ -489,7 +489,7 @@ snowbrush_pathogen_glm <-
                  "leaf_length","height","shoot_dm","final_root_dm"),
                names_to="indicator") %>% 
   lmer(data=.,
-       formula=value ~ proportion_pathogen * drought * fire_freq + (1|block))
+       formula=value ~ proportion_pathogen * drought * inoculum_site + (1|block))
 summary(snowbrush_pathogen_glm)
 saveRDS(snowbrush_pathogen_glm,"./Output/ITS_Pathogen_Model_Snowbrush.RDS")
 

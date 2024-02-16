@@ -47,7 +47,10 @@ plot_topten_relabund <- function(x){
   dat <- 
     x %>% 
     psmelt() %>% 
-    mutate(full_taxa_name= paste(Phylum,Class,Order,Family,Genus,Species) %>% str_remove_all(".__")) 
+    mutate(full_taxa_name= paste(Phylum,Subdivision,Order,Genus,Species) %>% 
+             str_remove_all(".__") %>% 
+             str_replace_all("_"," ") %>% 
+             str_remove("Mucoromycota ")) 
   
   # set factor levels for plotting
   dat$full_taxa_name <- factor(dat$full_taxa_name,
@@ -217,7 +220,7 @@ microbiome::meta(ps) %>%
   pivot_longer(all_of(plant_measures),names_to = "plant_measure") %>% 
   dplyr::filter(plant_measure != "bud_number") %>% 
   ggplot(aes(x=inoculum_site,y=value,fill=drought)) +
-  geom_violin() +
+  geom_boxplot() +
   facet_wrap(~host*plant_measure,scales = 'free',nrow = 2) +
   scale_fill_manual(values=pal.discrete[c(2,5)]) +
   theme(strip.text.x = element_text(face='bold.italic'),
@@ -256,6 +259,43 @@ alpha_long_transformed <-
 
 ## plots ####
 
+# Barplots
+# make samples ordered by site
+x <- data.frame(site=ps@sam_data$inoculum_site,
+                sample=ps@sam_data$sample_name) %>% 
+     arrange(site)
+
+sample_order <- 
+ x %>% 
+  pluck("sample")
+
+break_points <- 
+x %>% group_by(site) %>% 
+  summarize(break_point = tail(sample,1)) %>% 
+  pluck("break_point")
+
+# melt to data frame for plotting
+melted <- 
+ps %>% 
+  subset_taxa(Subdivision == "Glomeromycotina") %>% 
+  transform_sample_counts(function(x){x/sum(x)}) %>% 
+  psmelt()
+
+# plot bar chart
+p <- 
+melted %>% 
+  mutate(Sample = factor(Sample,levels=sample_order),
+         Genus = ifelse(is.na(Genus),"Undetermined",Genus)) %>% 
+  ggplot(aes(x=Sample,y=Abundance,fill=Genus)) +
+  geom_col() +
+  facet_wrap(~inoculum_site,nrow = 1,scales = 'free_x') +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle=90,hjust=1,vjust=.5,size=6),
+        strip.background = element_blank(),
+        strip.text = element_text(face='bold',size=12)) +
+  scale_fill_viridis_d() 
+p
+saveRDS(p,"./Output/figs/18S_Barplot_Genus.RDS")
 ### drought ####
 p <- 
 alpha_long_transformed %>%
@@ -439,7 +479,7 @@ p4; saveRDS(p4,"./Output/figs/18S_Ordination_Plots_Fire.RDS")
 
 # have to remove any rows with NA in predictor variables
 # sterile samples have NA for fire_freq... Should that be 0 or really NA? (probably NA)
-complete.rows <- ord_df %>% dplyr::filter(inoculum_site != "Sterile") %>% row.names()
+complete.rows <- ord_df %>% row.names()
 adonis_df <- ord_df[complete.rows,]
 
 ra_table <- ps %>% 
@@ -450,7 +490,7 @@ ra_table <- ps %>%
 
 permanova_results <- 
   adonis2(data = adonis_df,
-          formula = ra_table ~ adonis_df$host * adonis_df$fire_freq * adonis_df$drought, strata = adonis_df$block) %>% 
+          formula = ra_table ~ adonis_df$inoculum_site * adonis_df$drought, strata = adonis_df$block) %>% 
   broom::tidy() %>% 
   mutate(term = term %>% str_remove_all("adonis_df\\$"))
 
@@ -477,9 +517,7 @@ ra_table <- ps_genus %>%
   otu_table() %>% 
   as.data.frame()
 
-taxa_print <- corncob::otu_to_taxonomy(taxa_names(ps_genus),ps_genus) %>% 
-  str_remove("Mutualist_") %>% 
-  str_remove("Pathogen_")
+taxa_print <- corncob::otu_to_taxonomy(taxa_names(ps_genus),ps_genus)
 
 colnames(ra_table) <- janitor::make_clean_names(taxa_print)
 taxa_dictionary <- data.frame(assignment=colnames(ra_table),asv=taxa_names(ps_genus))
@@ -496,7 +534,6 @@ df <-
 df <- 
   df %>% 
   mutate(drought=case_when(drought == "D" ~ TRUE,TRUE ~ FALSE),
-         grandfir=case_when(host == "Abies grandis" ~ TRUE, TRUE ~ FALSE),
          burned=case_when(fire_freq > 0 ~ TRUE, TRUE ~ FALSE))
 
 
@@ -504,24 +541,24 @@ df <-
 df %>% names
 ### drought ####
 rf_drought_mod <- 
-  df %>% dplyr::select(drought,starts_with("k_")) %>%
+  df %>% dplyr::select(drought,starts_with("eukaryota_")) %>%
   ranger::ranger(formula = drought ~ .,
                  data=.,importance = 'permutation',num.trees = 999)
 saveRDS(rf_drought_mod,"./Output/18S_RF_model_drought.RDS")
 
 ### fire ####
 rf_fire_mod <- 
-  df %>% dplyr::select(burned,starts_with("k_")) %>%
+  df %>% dplyr::select(burned,starts_with("eukaryota_")) %>%
   ranger::ranger(formula = burned ~ .,
                  data=.,importance = 'permutation',num.trees = 999)
 saveRDS(rf_fire_mod,"./Output/18S_RF_model_fire.RDS")
 
-### host ####
-rf_host_mod <- 
-  df %>% dplyr::select(grandfir,starts_with("k_")) %>%
-  ranger::ranger(formula = grandfir ~ .,
+### inoc source ####
+rf_site_mod <- 
+  df %>% dplyr::select(inoculum_site,starts_with("eukaryota_")) %>%
+  ranger::ranger(formula = inoculum_site ~ .,
                  data=.,importance = 'permutation',num.trees = 999)
-saveRDS(rf_host_mod,"./Output/18S_RF_model_host.RDS")
+saveRDS(rf_fire_mod,"./Output/18S_RF_model_fire.RDS")
 
 ## VIP plots ####
 vip::vip(rf_drought_mod) + 
@@ -550,18 +587,25 @@ fire_topten <-
   head(10) %>% 
   pluck("Variable")
 
-vip::vip(rf_host_mod) + 
+vip::vip(rf_site_mod) + 
   theme_minimal() +
   theme(axis.text.y = element_text(face='bold.italic')) +
   labs(title="Top ten most important taxa detected by Random-Forest model",
-       subtitle = "Taxa indicative of Grand Fir.")
-ggsave("./Output/figs/18S_VIP_Plot_host.png",width = 8,height = 4)
+       subtitle = "Taxa indicative of different inoculum sources.")
+ggsave("./Output/figs/18S_VIP_Plot_site.png",width = 8,height = 4)
+
+site_topten <- 
+  vip::vi_model(rf_site_mod) %>% 
+  arrange(desc(Importance)) %>% 
+  head(10) %>% 
+  pluck("Variable")
+
 
 # pull together top ten taxa for each model
 topten_taxa_rf <- 
-  vip::vi_model(rf_host_mod) %>% 
+  vip::vi_model(rf_site_mod) %>% 
   arrange(desc(Importance)) %>% 
-  head(10) %>% mutate(model="host") %>% 
+  head(10) %>% mutate(model="site") %>% 
   full_join(
     vip::vi_model(rf_fire_mod) %>% 
       arrange(desc(Importance)) %>% 
@@ -586,13 +630,13 @@ ps_genus_topten <-
   ps_genus %>% 
   subset_taxa(taxa_names(ps_genus) %in% topten_dictionary$asv)
 # ps_genus_topten %>% tax_table() %>% View
-host_topten <- 
+site_topten <- 
   topten_dictionary$assignment %in%
   (topten_taxa_rf %>% 
-     dplyr::filter(model=="host") %>% 
+     dplyr::filter(model=="site") %>% 
      pluck("Variable"))
 
-host_topten_asvs <- topten_dictionary[host_topten,"asv"]
+site_topten_asvs <- topten_dictionary[site_topten,"asv"]
 
 fire_topten <- 
   topten_dictionary$assignment %in%
@@ -611,9 +655,9 @@ drought_topten <-
 drought_topten_asvs <- topten_dictionary[drought_topten,"asv"]
 
 
-ps_genus_host_topten <- 
+ps_genus_site_topten <- 
   ps_genus_topten %>% 
-  subset_taxa(taxa_names(ps_genus_topten) %in% host_topten_asvs)
+  subset_taxa(taxa_names(ps_genus_topten) %in% site_topten_asvs)
 
 ps_genus_fire_topten <- 
   ps_genus_topten %>% 
@@ -627,14 +671,15 @@ ps_genus_drought_topten <-
 
 # maybe these should be boxplots?
 p <- 
-ps_genus_host_topten %>% 
-  merge_samples("host") %>% 
+ps_genus_site_topten %>%
+  merge_samples("inoculum_site") %>% 
   transform_sample_counts(function(x){x/sum(x)}) %>% 
   plot_topten_relabund() +
-  scale_fill_manual(values = host_colors) +
-  labs(fill="Host")
-saveRDS(p,"./Output/figs/18S_Important_Taxa_Abundances_host.RDS")
-# ggsave("./Output/figs/18S_Important_Taxa_Abundances_host.png",width = 8,height = 5)
+  # scale_fill_manual(values = host_colors) +
+  labs(fill="Site") +
+  scale_fill_viridis_d(end=.8)
+saveRDS(p,"./Output/figs/18S_Important_Taxa_Abundances_site.RDS")
+
 p <- 
 ps_genus_fire_topten %>% 
   merge_samples("fire_freq") %>% 
@@ -658,9 +703,13 @@ saveRDS(p,"./Output/figs/18S_Important_Taxa_Abundances_drought.RDS")
 
 # HEATMAPS ####
 # full relabund transformation
-ps_ra_genus <- 
+ps_genus <- 
   ps %>% 
-  tax_glom("Genus") %>% 
+  tax_glom("Genus")# %>% otu_table() %>% View
+  
+ps_ra_genus <- 
+ps_genus %>% 
+  subset_samples(sample_sums(ps_genus) > 0) %>% 
   transform_sample_counts(function(x){x/sum(x)})
 
 (
@@ -683,11 +732,13 @@ saveRDS(p3,"./Output/figs/18S_heatmap_mostabund.RDS")
 # Corncob analysis ####
 
 # Clean up ASV names to show taxonomy
-ASV_names <- otu_table(ps) %>% colnames()
-ASV_taxa <- otu_to_taxonomy(ASV_names,ps,level = c("Phylum","Class","Order","Family","Genus","Species"))
+ASV_names <-ps %>% 
+  subset_taxa(Subdivision == "Glomeromycotina") %>% 
+  otu_table() %>% colnames()
+ASV_taxa <- otu_to_taxonomy(ASV_names,ps,level = c("Subdivision", "Order","Genus","Species"))
 
 genus_names <- otu_table(ps %>% tax_glom("Genus")) %>% colnames()
-genus_taxa <- otu_to_taxonomy(genus_names,ps_genus,level = c("Phylum","Class","Order","Family","Genus"))
+genus_taxa <- otu_to_taxonomy(genus_names,ps_genus,level = c("Subdivision", "Order","Genus"))
 
 
 # set levels of inoculum site so "sterile" is intercept
@@ -697,7 +748,7 @@ ps_genus@sam_data$inoculum_burn_freq_uo <- ps_genus@sam_data$inoculum_burn_freq 
                                                                                              c("Sterile","0","1","3"))
 ps_genus@sam_data$inoculum_burn_freq_uo[is.na(ps_genus@sam_data$inoculum_burn_freq_uo)] <- "Sterile"
 # use raw count data for corncob
-da_analysis_host <- differentialTest(formula = ~ host, #abundance
+da_analysis_site <- differentialTest(formula = ~ inoculum_site, #abundance
                                      phi.formula = ~ 1, #dispersion
                                      formula_null = ~ 1, #mean
                                      phi.formula_null = ~ 1,
@@ -722,77 +773,9 @@ da_analysis_drought <- differentialTest(formula = ~ drought, #abundance
                                         fdr_cutoff = 0.05,
                                         full_output = TRUE)
 
-# TAXA FOUND BY RF AND CORNCOB ####
-
-# find taxa that were identified by corncob and random forest
-host_both_significant <- da_analysis_host$significant_taxa[da_analysis_host$significant_taxa %in% host_topten_asvs]
-host_both_significant_taxa <- corncob::otu_to_taxonomy(host_both_significant,ps)
-
-fire_both_significant <- da_analysis_inocburnfreq$significant_taxa[da_analysis_inocburnfreq$significant_taxa %in% fire_topten_asvs]
-fire_both_significant_taxa <- corncob::otu_to_taxonomy(fire_both_significant,ps)
-
-
-
-# pull out for custom plotting
-host_model_df <- extract_bbdml_model(da_analysis = da_analysis_host,sig.taxa = host_both_significant_taxa)
-host_model_df <- host_model_df %>% 
-  mutate(model_factor = model_factor %>% str_remove("mu.host"),
-         guild = ps@tax_table[host_model_df$asv,"Guild"] %>% as.character())
-fire_model_df <- extract_bbdml_model(da_analysis = da_analysis_inocburnfreq,sig.taxa = fire_both_significant_taxa) 
-fire_model_df <- fire_model_df %>% 
-  mutate(model_factor = model_factor %>% str_replace("mu.inoculum_burn_freq_uo","Burn frequency: "),
-         guild = ps@tax_table[fire_model_df$asv,"Guild"] %>% as.character())
-
-## Overview plots ####
-p <- 
-host_model_df %>%
-  ggplot(aes(y=taxonomy,x=estimate)) +
-  geom_vline(xintercept=0,linetype=2,color='gray') +
-  geom_errorbarh(aes(xmin=est_min,xmax=est_max,height=.3)) +
-  labs(subtitle = "Intercept: A. grandis",color="Guild") +
-  facet_wrap(~model_factor) +
-  theme(strip.text = element_text(face='bold.italic',size=12),
-        axis.text.y = element_text(face="bold.italic")) +
-  scale_color_manual(values = "brown4") 
-  saveRDS(p,"./Output/figs/18S_DiffAbund_Overview_host.RDS")
-# ggsave("./Output/figs/18S_DiffAbund_Overview_host.png",dpi=300,height = 4,width = 12)
-
-p <- 
-fire_model_df %>%
-  ggplot(aes(y=taxonomy,x=estimate)) +
-  geom_vline(xintercept=0,linetype=2,color='gray') +
-  geom_errorbarh(aes(xmin=est_min,xmax=est_max,height=.3,position='dodge')) +
-  labs(subtitle = "Intercept: A. grandis",color="Guild") +
-  facet_wrap(~model_factor) +
-  theme(strip.text = element_text(face='bold.italic',size=12),
-        axis.text.y = element_text(face="bold.italic")) +
-  scale_color_manual(values = "brown4")
-  saveRDS(p,"./Output/figs/18S_DiffAbund_Overview_fire.RDS")
-# ggsave("./Output/figs/18S_DiffAbund_Overview_fire.png",dpi=300,height = 4,width = 14)
-
-
-
-
-########## Stopped here Jan 24th, 2024 ...
-
-# Might want to get rid of perfectly discriminant taxa (found only in one condition)  ???
-# (pull top 20 from RF, match those found with corncob, remove those that are discriminant, then use that list) ???
-
-## bbdml plots ####
-host_multi_bbdml <- multi_bbdml(da_analysis_host,ps,"host",'host')
-host_bbdml_plots <- plot_multi_bbdml(host_multi_bbdml,color='host')
-saveRDS(host_bbdml_plots,"./Output/figs/host_bbdml_plots.RDS")
-
-fire_multi_bbdml <- multi_bbdml(da_analysis_fire,ps,"inoculum_burn_freq",'inoculum_burn_freq')
-fire_bbdml_plots <- plot_multi_bbdml(fire_multi_bbdml,color='inoculum_burn_freq')
-saveRDS(fire_bbdml_plots,"./Output/figs/fire_bbdml_plots.RDS")
-
-drought_multi_bbdml <- multi_bbdml(da_analysis_drought,ps,"drought",'drought')
-drought_bbdml_plots <- plot_multi_bbdml(drought_multi_bbdml,color='drought')
-saveRDS(drought_bbdml_plots,"./Output/figs/drought_bbdml_plots.RDS")
-
-
-#
+site_bbdml <- multi_bbdml(da_analysis_site,ps_genus,mu_predictor = "inoculum_site",phi_predictor = "inoculum_site")
+plot_multi_bbdml(site_bbdml,color = "inoculum_site")
+ggsave("./Output/figs/18S_BBDML_Plot.png",height = 6, width = 6)
 
 
 
@@ -800,33 +783,4 @@ saveRDS(drought_bbdml_plots,"./Output/figs/drought_bbdml_plots.RDS")
 
 
 
-p4 <- 
-  plot(da_analysis_host) +
-  theme(legend.position = 'none') 
-saveRDS(p4,"./Output/18S_diffabund_inocsite.RDS")
 
-# quick look at Rhizobium and Phenylobacterium and Neorhizobium
-
-rhizobium_asv <- 
-  ps_genus@tax_table[which(ps_genus@tax_table[,6] == "Rhizobium"),] %>% row.names()
-phenylobacterium_asv <- 
-  ps_genus@tax_table[which(ps_genus@tax_table[,6] == "Phenylobacterium"),] %>% row.names()
-neorhizobium_asv <- 
-  ps_genus@tax_table[which(ps_genus@tax_table[,6] == "Neorhizobium"),] %>% row.names()
-
-sig_taxa <- da_analysis_inocsite$significant_taxa %>% otu_to_taxonomy(data=ps_genus)
-bbdml_obj <- multi_bbdml(da_analysis_inocsite,
-                         ps_object = ps_genus,
-                         mu_predictor = "inoculum_site",
-                         phi_predictor = "inoculum_site",
-                         taxlevels = 4:6)
-
-names(bbdml_obj)
-
-# plot 2 significant taxa, for now (rhizobium and phenylobacterium)
-plot_multi_bbdml(bbdml_obj[c(2,9)],color = "inoculum_site",pointsize = 3)  
-
-bbdml_plot_1
-bbdml_plot_2
-saveRDS(bbdml_plot_1,"./Output/18S_bbdml_plot_1.RDS")
-saveRDS(bbdml_plot_2,"./Output/18S_bbdml_plot_2.RDS")

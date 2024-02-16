@@ -2,6 +2,9 @@
 Data/Raw/
 Data/Filtered/
 
+# Shiny
+apps/
+
 # Notes
 Notes/
 
@@ -13,6 +16,7 @@ Output/16S_ML_Distance.RDS
 
 # igraph plots (one for each sample)
 Output/figs/igraphs/
+network_plots/
 
 # History files
 .Rhistory
@@ -63,3 +67,11 @@ po/*~
 
 # RStudio Connect folder
 rsconnect/
+
+
+# Other stuff (big files)
+Output/figs/16S_Barplot_Phylum.RDS
+Taxonomy/combined_pr2-maarjam_reference.fasta
+Taxonomy/pr2_version_5.0.0_SSU_dada2.fasta
+.git/objects/pack/pack-f5b4369b4c1345bce0b1d9967d5a64b922e81330.pack
+
