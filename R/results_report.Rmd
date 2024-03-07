@@ -26,6 +26,8 @@ theme_set(theme_bw())
 
 **Scaled-centered plant 'health' measures, broken down by treatment factors.**
 
+**Figure 1**
+
 ```{r, fig.width=10, fig.height=6}
 p <- readRDS("../Output/figs/Plant_Health_Measures_Plot.RDS")
 p
@@ -36,7 +38,9 @@ p
 
 
 Formula: `value ~ drought * host * site + (1|block))`
-```{r}
+
+**Table 1**
+```{r,fig.cap="Table 1"}
 
 df <- readRDS("../Output/Plant_Health_Measures_Overview_Model_table.RDS")
 df %>% 
@@ -62,7 +66,9 @@ ___
 
 ### **Bacteria**
 
-```{r}
+**Figure 2**
+
+```{r, }
 site1.inoc.full <- readRDS("../Output/phyloseq_objects/16S_site1.inoc.RDS")
 site2.inoc.full <- readRDS("../Output/phyloseq_objects/16S_site2.inoc.RDS")
 site3.inoc.full <- readRDS("../Output/phyloseq_objects/16S_site3.inoc.RDS")
@@ -82,6 +88,8 @@ sterile.full@phy_tree <- NULL
 bact_inoc <- merge_phyloseq(site1.inoc.full,site2.inoc.full,site3.inoc.full,site4.inoc.full,site5.inoc.full,site6.inoc.full)
 bact_inoc <- bact_inoc %>% 
   subset_samples(!is.na("other_frompreviouscolumn"))
+# bact_inoc@tax_table[,"Phylum"][is.na(bact_inoc@tax_table[,"Phylum"])] <- "Undetermined"
+
 bact_inoc %>% 
   subset_taxa(taxa_sums(bact_inoc) > 0) %>% 
   merge_samples("other_frompreviouscolumn") %>% 
@@ -95,6 +103,7 @@ bact_inoc %>%
 
 Effect of Shannon diversity on plant measures
 
+
 ```{r}
 readRDS("../Output/figs/16S_Shannon_vs_plant_site.RDS")
 readRDS("../Output/figs/16S_Shannon_vs_plant_burnfreq.RDS")
@@ -102,7 +111,11 @@ readRDS("../Output/figs/16S_Shannon_vs_plant_drought.RDS")
 
 m <- readRDS("../Output/16S_alpha_diversity_lmermod_model.RDS") 
 formula(m)
+```
 
+**Table 2**
+
+```{r}
 df <- readRDS("../Output/16S_alpha_diversity_lmermod_table.RDS") 
 df %>% 
   mutate(across(where(is.numeric),function(x){round(x,3)})) %>% 
@@ -114,6 +127,8 @@ df %>%
 
 
 ### **Fungi**
+
+**Figure 3**
 
 ```{r}
 site1.inoc.full <- readRDS("../Output/phyloseq_objects/ITS_site1.inoc.RDS")
@@ -144,6 +159,8 @@ bact_inoc %>%
 
 Effect of Shannon diversity on plant measures
 
+
+**Table 3**
 ```{r}
 readRDS("../Output/figs/ITS_Shannon_vs_plant_site.RDS")
 readRDS("../Output/figs/ITS_Shannon_vs_plant_burnfreq.RDS")
@@ -161,6 +178,7 @@ df %>%
 
 ### **AMF**
 
+**Figure 4**
 ```{r}
 site1.inoc.full <- readRDS("../Output/phyloseq_objects/18S_site1.inoc.RDS")
 site2.inoc.full <- readRDS("../Output/phyloseq_objects/18S_site2.inoc.RDS")
@@ -186,7 +204,7 @@ bact_inoc %>%
 
 Effect of Shannon diversity on plant measures
 
-
+**Table 4**
 ```{r}
 readRDS("../Output/figs/18S_Shannon_vs_plant_site.RDS")
 readRDS("../Output/figs/18S_Shannon_vs_plant_burnfreq.RDS")
@@ -207,6 +225,7 @@ ___
 
 ### **Bacteria**
 
+**Figure 5**
 ```{r}
 p1 <- readRDS("../Output/figs/16S_inoc_plot_1.RDS") + labs(title = "Inoculum 1")
 p2 <- readRDS("../Output/figs/16S_inoc_plot_2.RDS") + labs(title = "Inoculum 2")
@@ -218,7 +237,7 @@ p6 <- readRDS("../Output/figs/16S_inoc_plot_6.RDS") + labs(title = "Inoculum 6")
 (p1 + p2 + p3) / (p4 + p5 + p6) + patchwork::plot_layout(guides='collect')
 ```
 
-
+**Figure 6**
 ```{r}
 readRDS("../Output/figs/16S_Barplot_Phylum.RDS") + labs(title = "Root 16S Overview")
 ```
@@ -227,6 +246,7 @@ readRDS("../Output/figs/16S_Barplot_Phylum.RDS") + labs(title = "Root 16S Overvi
 
 **Not all taxa in the inoculae were subsequently found in the root samples**
 
+**Figure 7**
 ```{r}
 include_graphics("../Output/figs/16S_successful_vs_unsuccessful_taxa_breakdown.png")
 
@@ -238,6 +258,7 @@ include_graphics("../Output/figs/16S_successful_vs_unsuccessful_taxa_breakdown.p
 
 ### **Fungi**
 
+**Figure 8**
 ```{r}
 p1 <- readRDS("../Output/figs/ITS_inoc_plot_1.RDS") + labs(title = "Inoculum 1")
 p2 <- readRDS("../Output/figs/ITS_inoc_plot_2.RDS") + labs(title = "Inoculum 2")
@@ -251,7 +272,7 @@ p6 <- readRDS("../Output/figs/ITS_inoc_plot_6.RDS") + labs(title = "Inoculum 6")
 
 
 
-
+**Figure 9**
 ```{r}
 readRDS("../Output/figs/ITS_Barplot_Class.RDS") + labs(title = "Root ITS Overview")
 ```
@@ -259,6 +280,7 @@ readRDS("../Output/figs/ITS_Barplot_Class.RDS") + labs(title = "Root ITS Overvie
 <br>
 **Not all taxa in the inoculae were subsequently found in the root samples**
 
+**Figure 10**
 ```{r}
 include_graphics("../Output/figs/ITS_successful_vs_unsuccessful_taxa_breakdown.png")
 ```
@@ -268,6 +290,7 @@ include_graphics("../Output/figs/ITS_successful_vs_unsuccessful_taxa_breakdown.p
 
 ### **AMF**
 
+**Figure 11**
 ```{r}
 p1 <- readRDS("../Output/figs/18S_inoc_plot_1.RDS") + labs(title = "Inoculum 1")
 p2 <- readRDS("../Output/figs/18S_inoc_plot_2.RDS") + labs(title = "Inoculum 2")
@@ -280,13 +303,14 @@ p6 <- readRDS("../Output/figs/18S_inoc_plot_6.RDS") + labs(title = "Inoculum 6")
 ```
 
 
-
+**Figure 12**
 ```{r}
 readRDS("../Output/figs/18S_Barplot_Genus.RDS") + labs(title = "Root AMF Overview")
 ```
 <br>
 **Not all taxa in the inoculae were subsequently found in the root samples**
 
+**Figure 13**
 ```{r}
 include_graphics("../Output/figs/18S_successful_vs_unsuccessful_taxa_breakdown.png")
 ```
@@ -305,6 +329,7 @@ ___
 
 I couldn't get a trustworthy annotation of "mutualists" for bacteria, but here are probable pathogens:
 
+**Figure 14**
 ```{r mutualistplots16S, fig.width=8,fig.height=5}
 p1 <- readRDS("../Output/figs/16S_Pathogen_Plot_grandfir.RDS") + ggtitle("Grand fir")
 p2 <- readRDS("../Output/figs/16S_Pathogen_Plot_snowbrush.RDS") + ggtitle("Snowbrush")
@@ -316,6 +341,7 @@ p2
 p4
 ```
   
+**Table 5**
 ```{r}
 df <- readRDS("../Output/16S_Guild_Model_Output.RDS") 
 m <- readRDS("../Output/16S_Pathogen_Model_Snowbrush.RDS")
@@ -337,6 +363,7 @@ How does the proportion of mutualist fungi relate to indicators of plant health?
 
 In the following figure, the X-axis represents the proportion of fungi that could be identified to a mutualistic guild; the Y-axis represents the value of the various measures of plant success (facets). Y-axis scales vary between facets.
 
+**Figure 15**
 ```{r mutualistplots, fig.width=8,fig.height=5}
 p1 <- readRDS("../Output/figs/ITS_Mutualist_Plot_grandfir.RDS")
 p2 <- readRDS("../Output/figs/ITS_Mutualist_Plot_snowbrush.RDS")
@@ -353,7 +380,7 @@ p4 + ggtitle("Snowbrush")
 
 **We see an opposite pattern when looking at the proportions of putatively pathogenic fungi**
 
-
+**Figure 16**
 ```{r pathogenplots, fig.width=8,fig.height=5}
 p1 <- readRDS("../Output/figs/ITS_Pathogen_Plot_grandfir.RDS")
 p2 <- readRDS("../Output/figs/ITS_Pathogen_Plot_snowbrush.RDS")
@@ -366,7 +393,7 @@ p4 + ggtitle("Snowbrush")
 
 ```
 
-
+**Table 6**
 ```{r}
 df <- readRDS("../Output/ITS_Guild_Model_Output.RDS") 
 df %>% 
@@ -388,13 +415,17 @@ ___
 
 ## **Bacteria**
 
-
+**Figure 17**
 ```{r, fig.width=8,fig.height=6}
 readRDS("../Output/figs/16S_Ordination_Plots_Host.RDS") + theme(legend.position = 'bottom')
 readRDS("../Output/figs/16S_Ordination_Plots_Host.RDS")
 readRDS("../Output/figs/16S_Ordination_Plots_Drought.RDS") + theme(legend.position = 'bottom')
 readRDS("../Output/figs/16S_Ordination_Plots_Site.RDS") + theme(legend.position = 'bottom')
 readRDS("../Output/figs/16S_Ordination_Plots_Fire.RDS") + theme(legend.position = 'bottom')
+```
+
+**Table 7**
+```{r}
 cat("PermANOVA run without outlier Sterile-inoculum root samples...")
 readRDS("../Output/16S_Permanova_Table.RDS") %>% 
   kable() %>% kable_classic(lightable_options = 'hover')
@@ -404,12 +435,16 @@ readRDS("../Output/16S_Permanova_Table.RDS") %>%
 
 ## **Fungi**
 
+**Figure 18**
 ```{r, fig.width=8,fig.height=6}
 readRDS("../Output/figs/ITS_Ordination_Plots_Host.RDS") + theme(legend.position = 'bottom')
 readRDS("../Output/figs/ITS_Ordination_Plots_Drought.RDS") + theme(legend.position = 'bottom')
 readRDS("../Output/figs/ITS_Ordination_Plots_Site.RDS") + theme(legend.position = 'bottom')
 readRDS("../Output/figs/ITS_Ordination_Plots_Fire.RDS") + theme(legend.position = 'bottom')
+```
 
+**Table 7**
+```{r}
 cat("PermANOVA run without outlier Sterile-inoculum root samples...")
 
 readRDS("../Output/ITS_Permanova_Table.RDS") %>% 
@@ -418,12 +453,16 @@ readRDS("../Output/ITS_Permanova_Table.RDS") %>%
 
 ## **AMF**
 
+**Figure 19**
 ```{r, fig.width=8,fig.height=6}
 # readRDS("../Output/figs/18S_Ordination_Plots_Host.RDS") + theme(legend.position = 'bottom')
 readRDS("../Output/figs/18S_Ordination_Plots_Drought.RDS") + theme(legend.position = 'bottom')
 readRDS("../Output/figs/18S_Ordination_Plots_Fire.RDS") + theme(legend.position = 'bottom')
 readRDS("../Output/figs/18S_Ordination_Plots_Site.RDS") + theme(legend.position = 'bottom')
+```
 
+**Table 8**
+```{r}
 cat("PermANOVA run without outlier Sterile-inoculum root samples...")
 
 readRDS("../Output/18S_Permanova_Table.RDS") %>% 
@@ -447,6 +486,8 @@ ___
 
 
 ### **Differential Abundance**
+
+**Figure 20**
 ```{r, fig.width=12,fig.height=6}
 readRDS("../Output/figs/16S_DiffAbund_Overview_host.RDS")
 readRDS("../Output/figs/16S_DiffAbund_Overview_fire.RDS")
@@ -455,6 +496,7 @@ readRDS("../Output/figs/16S_DiffAbund_Overview_drought.RDS")
 
 ### **Relative Abundances of 'important' taxa in root samples**
 
+**Figure 21**
 ```{r, fig.width=12,fig.height=8}
 readRDS("../Output/figs/16S_Important_Taxa_Abundances_host.RDS")
 
@@ -470,6 +512,7 @@ readRDS("../Output/figs/16S_Important_Taxa_Abundances_drought.RDS")
 
 ### **Differential Abundance**
 
+**Figure 22**
 ```{r,fig.width=12,fig.height=6}
 readRDS("../Output/figs/ITS_DiffAbund_Overview_host.RDS")
 readRDS("../Output/figs/ITS_DiffAbund_Overview_fire.RDS")
@@ -480,6 +523,7 @@ readRDS("../Output/figs/ITS_DiffAbund_Overview_fire.RDS")
 
 ### **Relative Abundances of 'important' taxa in root samples**
 
+**Figure 23**
 ```{r, fig.width=12,fig.height=8}
 readRDS("../Output/figs/ITS_Important_Taxa_Abundances_host.RDS")
 readRDS("../Output/figs/ITS_Important_Taxa_Abundances_fire.RDS")
@@ -497,6 +541,7 @@ readRDS("../Output/figs/ITS_Important_Taxa_Abundances_drought.RDS")
 
 ### **Differential Abundance**
 
+**Figure 24**
 ```{r,fig.width=12,fig.height=6}
 include_graphics("../Output/figs/18S_BBDML_Plot.png")
 
@@ -506,6 +551,7 @@ include_graphics("../Output/figs/18S_BBDML_Plot.png")
 
 ### **Relative Abundances of 'important' taxa in root samples**
 
+**Figure 25**
 ```{r, fig.width=12,fig.height=8}
 readRDS("../Output/figs/18S_Important_Taxa_Abundances_site.RDS")
 readRDS("../Output/figs/18S_Important_Taxa_Abundances_fire.RDS")
@@ -549,6 +595,7 @@ _____
 
 ## **Selected network attributes**
 
+**Figure 26**
 ```{r networkplots1, fig.height=24}
 readRDS("../Output/figs/Network_Attributes_Plot_by_host-inoc-kingdom.RDS")
 ```
@@ -557,6 +604,7 @@ readRDS("../Output/figs/Network_Attributes_Plot_by_host-inoc-kingdom.RDS")
 
 (Composite scaled-centered plant health measures)
 
+**Table 9**
 ```{r}
 net_mod <- readRDS("../Output/Model_Network_Attributes_vs_Plant_Health.RDS")
 net_mod$formula
@@ -565,7 +613,7 @@ net_mod$formula
 
 
 
-
+**Table 10**
 ```{r}
 net_mod %>% 
   broom::tidy() %>% 

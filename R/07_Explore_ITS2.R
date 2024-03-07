@@ -499,7 +499,7 @@ ra_table <- ps %>%
 
 permanova_results <- 
   adonis2(data = adonis_df,
-          formula = ra_table ~ adonis_df$host * adonis_df$fire_freq * adonis_df$drought, strata = adonis_df$block) %>% 
+          formula = ra_table ~ adonis_df$host * adonis_df$inoculum_site * adonis_df$drought, strata = adonis_df$block) %>% 
   broom::tidy() %>% 
   mutate(term = term %>% str_remove_all("adonis_df\\$"))
 

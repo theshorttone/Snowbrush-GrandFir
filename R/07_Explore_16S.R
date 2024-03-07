@@ -205,7 +205,7 @@ inoc <- readRDS("./Output/phyloseq_objects/16S_inoculum_samples_clean_phyloseq_o
 sample_names(inoc)
 
 variables <- names(sample_data(ps))
-plant_measures <- c("wilting_scale","bud_number","leaf_number","leaf_length","height")
+plant_measures <- c("bud_number","leaf_number","leaf_length","height")
 soil_variables <- grep("mean_",variables,value=TRUE)  
 predictors <- c("drought","inoculum_site","fire_freq","host")
 
@@ -233,8 +233,9 @@ microbiome::meta(ps) %>%
   pivot_longer(all_of(plant_measures),names_to = "plant_measure") %>% 
   dplyr::filter(plant_measure != "bud_number") %>% 
   dplyr::filter(plant_measure != "wilting_scale") %>% 
+  # mutate(inoculum_site = inoculum_site %>% factor(levels=c("Sterile",as.character(1:6)))) %>%
   lmer(data = .,
-       formula = value ~ drought * host * fire_freq + (1|inoculum_site/block)) %>% 
+       formula = value ~ drought * host * inoculum_site + (1|block)) %>% 
   broom.mixed::tidy() %>% 
   saveRDS("./Output/Plant_Health_Measures_Overview_Model_table.RDS")
 
@@ -506,10 +507,10 @@ ra_table <- ps %>%
   
 permanova_results <- 
 adonis2(data = adonis_df,
-        formula = ra_table ~ adonis_df$host * adonis_df$fire_freq * adonis_df$drought, strata = adonis_df$block) %>% 
+        formula = ra_table ~ adonis_df$host * adonis_df$inoculum_site * adonis_df$drought, strata = adonis_df$block) %>% 
   broom::tidy() %>% 
   mutate(term = term %>% str_remove_all("adonis_df\\$"))
-
+saveRDS(permanova_results,"./Output/16S_Permanova_Table.RDS")
 
 
 # FIND IMPORTANT TAXA ####
