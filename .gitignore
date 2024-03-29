@@ -76,3 +76,6 @@ Taxonomy/pr2_version_5.0.0_SSU_dada2.fasta
 .git/objects/pack/pack-f5b4369b4c1345bce0b1d9967d5a64b922e81330.pack
 
 Output/figs/16S_Barplot_Phylum.RDS
+Output/16S_ML_Distance.RDS
+Output/figs/ALL_guild_plots.tiff
+Output/ITS_SpiecEasi_out.RDS

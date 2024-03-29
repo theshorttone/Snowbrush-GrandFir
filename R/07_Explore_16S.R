@@ -240,6 +240,18 @@ microbiome::meta(ps) %>%
   saveRDS("./Output/Plant_Health_Measures_Overview_Model_table.RDS")
 
 
+## wilting scale vs pathogen load and size
+microbiome::meta(ps) %>% 
+  mutate(mass = shoot_dm + final_root_dm) %>% 
+  dplyr::filter(species == "Snowbrush") %>% 
+  lmer(data=.,
+       formula=wilting_scale ~ mass * drought + (1|block)) %>% summary
+  broom::tidy() %>% 
+  write_csv("./Output/snowbrush_wilting_vs_mass.csv")
+  ggplot(aes(x=(shoot_dm + final_root_dm),
+             y=wilting_scale)) +
+  geom_point()
+
 # ALPHA-DIV ESTIMATES ####
 alpha <- estimate_richness(ps) %>% 
   select(Observed,Shannon, Simpson)

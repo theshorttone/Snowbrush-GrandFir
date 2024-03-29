@@ -535,4 +535,75 @@ MRM_df <-
   mutate(across(where(is.numeric),function(x){round(x,3)}))
 saveRDS(MRM_df,"./Output/ITS_MRM_stats_table_inoc_vs_final.RDS")
 
+# CHECK SUCCESSFUL AGAINST STERILE ####
+# Check whether "successful ASVs" are also found in sterile control samples
 
+# Get full list of successful ASVs that made it into root samples
+successful_taxa <- fung_successful %>% subset_taxa(taxa_sums(fung_successful) > 0) %>% taxa_names
+
+# Get full list of ASVs from Sterile Control root samples
+x <- readRDS("Output/phyloseq_objects/ITS_clean_phyloseq_object.RDS")
+x <- x %>% subset_samples(inoculum_site == "Sterile")
+sterile_taxa <- x %>% subset_taxa(taxa_sums(x) > 0) %>% taxa_names
+
+# Find matches
+data.frame(successful_asv = successful_taxa,
+           taxonomy = corncob::otu_to_taxonomy(successful_taxa,fung),
+           found_in_sterile = successful_taxa %in% sterile_taxa) %>% 
+  write_csv("./Output/ITS_successful_taxa_comparison_w_sterile.csv")
+
+
+# Remove "successful" transplants that were also found in sterile controls
+sterile_contams <- 
+  data.frame(successful_asv = successful_taxa,
+             taxonomy = corncob::otu_to_taxonomy(successful_taxa,fung),
+             found_in_sterile = successful_taxa %in% sterile_taxa) %>% 
+  dplyr::filter(found_in_sterile)
+
+
+
+# find environmental or other predictors of successful taxa
+# do any of these taxa  associate with drought, fire, block? what?
+successful_taxa <- 
+  data.frame(successful_asv = successful_taxa,
+             taxonomy = corncob::otu_to_taxonomy(successful_taxa,fung),
+             found_in_sterile = successful_taxa %in% sterile_taxa) %>% 
+  dplyr::filter(!found_in_sterile) %>% 
+  pluck("successful_asv")
+
+saveRDS(successful_taxa,"./Output/Successful_ASVs_ITS.RDS")
+
+
+
+fung_merged %>% 
+  psmelt() %>% 
+  mutate(success=ifelse(success == "FALSE","Unsuccessful","Successful")) %>% 
+  dplyr::filter(OTU %ni% sterile_contams$successful_asv) %>% 
+  ggplot(aes(x=site,y=Abundance,fill=Phylum)) +
+  geom_col() +
+  coord_flip() +
+  facet_wrap(~success) +
+  scale_fill_viridis_d() +
+  theme(strip.text = element_text(face='bold',size = 12),
+        axis.text = element_text(face='bold',size=12),
+        axis.title = element_text(face='bold',size=12)) +
+  labs(x="",y="Relative abundance",title = "Taxonomy of successfully vs \nunsuccessfully transplanted ASVs")
+ggsave("./Output/figs/ITS_successful_vs_unsuccessful_taxa_breakdown.png",width = 12,height = 8)
+
+
+
+# final output (proportions for each)
+success_16S <- read_csv("./Output/16S_successful_taxa_comparison_w_sterile.csv") %>% mutate(amplicon = "16S")
+success_18S <- read_csv("./Output/18S_successful_taxa_comparison_w_sterile.csv") %>% mutate(amplicon = "18S")
+success_ITS <- read_csv("./Output/ITS_successful_taxa_comparison_w_sterile.csv") %>% mutate(amplicon = "ITS")
+
+x <- 
+success_16S %>% 
+  full_join(success_18S) %>% 
+  full_join(success_ITS)
+x %>% 
+  write_csv("./Output/Full_successful_taxa_comparison_w_sterile.csv")
+
+x %>% 
+  group_by(amplicon) %>% 
+  summarize(proportion_in_sterile = sum(found_in_sterile) / n())

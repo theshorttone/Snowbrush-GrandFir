@@ -545,10 +545,10 @@ data.frame(
 
 ps <- successful_1; mrm_1 <- run_MRM_inoc_final(ps)
 ps <- successful_2; mrm_2 <- run_MRM_inoc_final(ps)
-ps <- successful_3; mrm_3 <- run_MRM_inoc_final(ps)
+# ps <- successful_3; mrm_3 <- run_MRM_inoc_final(ps)
 ps <- successful_4; mrm_4 <- run_MRM_inoc_final(ps)
-ps <- successful_5; mrm_5 <- run_MRM_inoc_final(ps)
-ps <- successful_6; mrm_6 <- run_MRM_inoc_final(ps)
+# ps <- successful_5; mrm_5 <- run_MRM_inoc_final(ps)
+# ps <- successful_6; mrm_6 <- run_MRM_inoc_final(ps)
 
 # Pull MRM results tables into single table
 MRM_df <- 
@@ -570,3 +570,88 @@ MRM_df <-
 saveRDS(MRM_df,"./Output/18S_MRM_stats_table_inoc_vs_final.RDS")
 
 
+# CHECK SUCCESSFUL AGAINST STERILE ####
+# Check whether "successful ASVs" are also found in sterile control samples
+
+# Get full list of successful ASVs that made it into root samples
+successful_taxa <- fung_successful %>% subset_taxa(taxa_sums(fung_successful) > 0) %>% taxa_names
+
+# Get full list of ASVs from Sterile Control root samples
+x <- readRDS("Output/phyloseq_objects/18S_clean_phyloseq_object.RDS")
+x <- x %>% subset_samples(inoculum_site == "Sterile")
+sterile_taxa <- x %>% subset_taxa(taxa_sums(x) > 0) %>% taxa_names
+
+# Find matches
+data.frame(successful_asv = successful_taxa,
+           taxonomy = corncob::otu_to_taxonomy(successful_taxa,fung),
+           found_in_sterile = successful_taxa %in% sterile_taxa) %>% 
+  write_csv("./Output/18S_successful_taxa_comparison_w_sterile.csv")
+
+# Remove "successful" transplants that were also found in sterile controls
+sterile_contams <- 
+  data.frame(successful_asv = successful_taxa,
+             taxonomy = corncob::otu_to_taxonomy(successful_taxa,fung),
+             found_in_sterile = successful_taxa %in% sterile_taxa) %>% 
+  dplyr::filter(found_in_sterile)
+
+
+# find environmental or other predictors of successful taxa
+# do any of these taxa  associate with drought, fire, block? what?
+successful_taxa <- 
+  data.frame(successful_asv = successful_taxa,
+             taxonomy = corncob::otu_to_taxonomy(successful_taxa,fung),
+             found_in_sterile = successful_taxa %in% sterile_taxa) %>% 
+  dplyr::filter(!found_in_sterile) %>% 
+  pluck("successful_asv")
+saveRDS(successful_taxa,"./Output/Successful_ASVs_18S.RDS")
+
+
+fung_merged %>% 
+  psmelt() %>% 
+  mutate(success=ifelse(success == "FALSE","Unsuccessful","Successful")) %>% 
+  dplyr::filter(OTU %ni% sterile_contams$successful_asv) %>% 
+  ggplot(aes(x=site,y=Abundance,fill=Order)) +
+  geom_col() +
+  coord_flip() +
+  facet_wrap(~success) +
+  scale_fill_viridis_d() +
+  theme(strip.text = element_text(face='bold',size = 12),
+        axis.text = element_text(face='bold',size=12),
+        axis.title = element_text(face='bold',size=12)) +
+  labs(x="",y="Relative abundance",title = "Taxonomy of successfully vs \nunsuccessfully transplanted ASVs")
+ggsave("./Output/figs/18S_successful_vs_unsuccessful_taxa_breakdown.png",width = 12,height = 8)
+
+# inoc diversity vs final diversity
+
+get_inoc_diversity <- function(x){
+  x <- get(x)
+  inoc_id <- na.omit(x@sam_data$inoculum_site %>% unique) %>% as.character()
+  y <- x %>% 
+    subset_samples(!grepl("-[A,B,C]-",x@sam_data$sample_name)) %>% 
+    estimate_richness(measures = c("shannon")) %>% 
+    mutate(inoculum_site=inoc_id)
+    return(y)
+}
+
+inoc_shannon <- map(ls(pattern = "inoc.full"),get_inoc_diversity) %>% 
+  purrr::reduce(full_join) %>% 
+  group_by(inoculum_site) %>% 
+  summarize(inoc_med = median(Shannon,na.rm=TRUE),
+            inoc_mean = mean(Shannon,na.rm=TRUE),
+            inoc_sd = sd(Shannon,na.rm=TRUE))
+
+final <- readRDS("Output/phyloseq_objects/18S_clean_phyloseq_object.RDS")
+final_shannon <- estimate_richness(final,measures = "shannon")
+final_meta <- microbiome::meta(final)
+final_meta$shannon <- final_shannon$Shannon
+final_meta %>% 
+  dplyr::select(inoculum_site,shannon) %>% 
+  full_join(inoc_shannon) %>% unique.data.frame() %>% 
+  filter(inoculum_site != "Sterile") %>% 
+  mutate(inoc_min = inoc_mean - inoc_sd,inoc_max=inoc_mean + inoc_sd,
+         inoc_min = ifelse(inoc_min < 0,0,inoc_min)) %>% 
+  lmerTest::lmer(data=.,formula=inoc_mean ~ shannon + (1|inoculum_site)) %>% 
+  summary
+  # ggplot(aes(x=shannon,y=inoc_mean)) + 
+  # geom_point() +
+  # facet_wrap(~inoculum_site)

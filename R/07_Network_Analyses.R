@@ -49,6 +49,7 @@ fire_colors <- pal.discrete[c(18,2,14)]
 
 ## functions ####
 '%ni%' <- Negate('%in%')
+ra <- function(x){x/sum(x)}
 
 find_ig_subset_attr <- function(ps.subset,ig.full){
   
@@ -151,7 +152,7 @@ genus_barplot_by_inoc_amf <-
 
 saveRDS(phylum_barplot_by_inoc_bact,"./Output/figs/phylum_barplot_by_inoc_bact.RDS")
 saveRDS(phylum_barplot_by_inoc_fung,"./Output/figs/phylum_barplot_by_inoc_fung.RDS")
-saveRDS(phylum_barplot_by_inoc_amf,"./Output/figs/genus_barplot_by_inoc_amf.RDS")
+saveRDS(genus_barplot_by_inoc_amf,"./Output/figs/genus_barplot_by_inoc_amf.RDS")
 
 
 
@@ -714,6 +715,8 @@ data.frame(sample_name = names(fungal_subsets),
            max_degree = fungal_subsets %>% map_dbl(pluck("max_degree"))
            ) %>% 
   full_join(fung@sam_data)
+fungal_network_attributes_df$block <- as.character(fungal_network_attributes_df$block)
+fungal_network_attributes_df$inoculum_burn_freq <- ordered(fungal_network_attributes_df$inoculum_burn_freq,levels = c("0","1","3"))
 
 bacterial_network_attributes_df <- 
   data.frame(sample_name = names(bacterial_subsets),
@@ -745,8 +748,7 @@ amf_network_attributes_df <-
   ) %>% 
   full_join(amf@sam_data)
 amf_network_attributes_df$block <- as.character(amf_network_attributes_df$block)
-amf_network_attributes_df$inoculum_burn_freq <- as.character(amf_network_attributes_df$inoculum_burn_freq)
-
+amf_network_attributes_df$inoculum_burn_freq <- as.character(amf_network_attributes_df$inoculum_burn_freq) %>% ordered(levels = c("0","1","3"))
 
 full_network_attributes_df <- 
 bacterial_network_attributes_df  %>%
@@ -775,7 +777,8 @@ for(i in net_attrib_names){
     facet_wrap(~kingdom) +
     scale_fill_manual(values = host_colors) +
     theme(axis.text.x = element_text(angle = 90,hjust = 1),
-          axis.title.x = element_blank())
+          axis.title.x = element_blank()) +
+    labs(y="")
 attribute_plots[[i]] <- p  
 }
 
@@ -786,6 +789,7 @@ attribute_plots$n_vertices + attribute_plots$n_edges + attribute_plots$mean_dist
   patchwork::plot_layout(guides = 'collect',nrow = 5) +
   patchwork::plot_annotation(title = "Community network properties")
 attribute_multiplot
+ggsave("./Output/figs/Network_Attributes_Plot_by_host-inoc-kingdom.png",width = 24,height = 10,dpi=300)
 
 # save plot for later (Supplementary Info)
 saveRDS(attribute_multiplot,"./Output/figs/Network_Attributes_Plot_by_host-inoc-kingdom.RDS")
@@ -798,9 +802,8 @@ full_network_attributes_df_long <-
   mutate(across(c("wilting_scale","bud_number","leaf_number",
                   "leaf_length","height","shoot_dm","final_root_dm"),
                 scale01)) %>% # scale/center all indicators
-  pivot_longer(c("wilting_scale","bud_number","leaf_number",
-                 "leaf_length","height","shoot_dm","final_root_dm"),
-               names_to="indicator",values_to = "plant_health_indicator")
+  pivot_longer(c("leaf_number","shoot_dm","final_root_dm"),
+               names_to="indicator",values_to = "Plant_Growth_Response")
   
 
 attribute_plots <- list()
@@ -809,13 +812,15 @@ for(i in net_attrib_names){
 p <- 
   full_network_attributes_df_long %>% 
   ggplot(aes(x=.data[[i]],
-             y=plant_health_indicator,
+             y=Plant_Growth_Response,
              color=species)) +
-  geom_point(alpha=.3) +
-  facet_wrap(~kingdom,scales = 'free_x') +
+  geom_point(alpha=.1) +
+  facet_wrap(~factor(kingdom,levels=c("Fungi","AMF","Bacteria")),scales = 'free_x') +
   scale_color_manual(values = host_colors) +
   geom_smooth(method='lm',se=FALSE) +
-  labs(y="Plant health score")
+  labs(y="Growth response",color="Host\nspecies",x= i %>% str_replace("_"," ") %>% str_to_sentence()) +
+  theme(axis.text.x = element_text(angle=90,hjust=1,vjust=.5),
+        strip.background = element_rect(fill="white"))
 
 attribute_plots[[i]] <- p  
 
@@ -825,24 +830,68 @@ attribute_plots[[i]] <- p
 attribute_multiplot <- 
   attribute_plots$n_vertices + attribute_plots$n_edges + attribute_plots$mean_dist + attribute_plots$clique_num + attribute_plots$mean_betweenness + 
   attribute_plots$mean_closeness + attribute_plots$mean_coreness + attribute_plots$global_effic + attribute_plots$clustering_coeficient + attribute_plots$max_degree +
-  patchwork::plot_layout(guides = 'collect',nrow = 2) +
-  patchwork::plot_annotation(title = "Community network properties")
-
+  patchwork::plot_layout(guides = 'collect',nrow = 2,axis_titles = 'collect') +
+  patchwork::plot_annotation(title = " ")
+attribute_multiplot
 # save plot for later (Supplementary Info)
 saveRDS(attribute_multiplot,"./Output/figs/Network_Attributes_vs_Plant_Health.RDS")
+attribute_multiplot
 
-
+ggsave("./Output/figs/Network_Attributes_vs_Plant_Health.png",width = 20,height = 8,dpi=300)
 
 ## Model ####
 mod_full <- 
-  glm(data = full_network_attributes_df_long,
-      formula = plant_health_indicator ~ species * kingdom *
-        (n_vertices + n_edges + mean_dist + mean_betweenness + mean_closeness + global_effic + clustering_coeficient + max_degree))
+  lmer(data = dplyr::filter(full_network_attributes_df_long,kingdom != "AMF"),
+      formula = Plant_Growth_Response ~ species * kingdom * drought *
+        (n_vertices + n_edges + mean_dist + mean_betweenness + mean_closeness + global_effic + clustering_coeficient + max_degree) + (1|block))
 mod_full %>% summary
 
 saveRDS(mod_full,"./Output/Model_Network_Attributes_vs_Plant_Health.RDS")
 broom::tidy(mod_full) %>% 
-  dplyr::filter(p.value < 0.05)
+  dplyr::filter(p.value < 0.05) %>% 
+  mutate(term = term %>% str_remove("species") %>% str_remove("kingdom")) %>% 
+  kableExtra::kable() %>% kableExtra::kable_classic()
+
+bact_net_complexity <- 
+full_network_attributes_df_long %>% 
+  dplyr::filter(kingdom=="Bacteria") %>% 
+  mutate(across(all_of(c("n_vertices","n_edges","mean_dist","mean_betweenness","mean_closeness","global_effic","clustering_coeficient","max_degree")),scale01)) %>% 
+  group_by(kingdom,species,drought,block) %>% 
+  summarize(network_complexity = mean(n_vertices + n_edges + mean_dist + mean_betweenness + mean_closeness + global_effic + clustering_coeficient + max_degree,na.rm=TRUE),
+            Plant_Growth_Response = mean(Plant_Growth_Response,na.rm=TRUE))
+
+fung_net_complexity <- 
+  full_network_attributes_df_long %>% 
+  dplyr::filter(kingdom=="Fungi") %>% 
+  mutate(across(all_of(c("n_vertices","n_edges","mean_dist","mean_betweenness","mean_closeness","global_effic","clustering_coeficient","max_degree")),scale01)) %>% 
+  group_by(kingdom,species,drought,block) %>% 
+  summarize(network_complexity = mean(n_vertices + n_edges + mean_dist + mean_betweenness + mean_closeness + global_effic + clustering_coeficient + max_degree,na.rm=TRUE),
+            Plant_Growth_Response = mean(Plant_Growth_Response,na.rm=TRUE))
+
+amf_net_complexity <- 
+  full_network_attributes_df_long %>% 
+  dplyr::filter(kingdom=="AMF") %>% 
+  mutate(across(all_of(c("n_vertices","n_edges","mean_dist","mean_betweenness","mean_closeness","global_effic","clustering_coeficient","max_degree")),scale01)) %>% 
+  group_by(kingdom,species,drought,block) %>% 
+  summarize(network_complexity = mean(n_vertices + n_edges + mean_dist + mean_betweenness + mean_closeness + global_effic + clustering_coeficient + max_degree,na.rm=TRUE),
+            Plant_Growth_Response = mean(Plant_Growth_Response,na.rm=TRUE))
+
+
+full_join(bact_net_complexity,fung_net_complexity) %>% 
+  full_join(amf_net_complexity) %>% 
+  mutate(Moisture=case_when(drought=="D"~"Low",drought=="ND"~"High")) %>% 
+  ggplot(aes(x=network_complexity,y=Plant_Growth_Response,color=Moisture)) +
+  geom_point(alpha=.5,size=3) +
+  geom_smooth(method='lm',color='black',se=FALSE) +
+  scale_color_manual(values = drought_colors) +
+  facet_wrap(~kingdom,scales = 'free_x')
+
+full_join(bact_net_complexity,fung_net_complexity) %>% 
+  full_join(amf_net_complexity) %>% 
+  mutate(Moisture=case_when(drought=="D"~"Low",drought=="ND"~"High")) %>% 
+  lmer(data=.,
+       formula=Plant_Growth_Response ~ network_complexity * species * kingdom + (1|block)) %>% 
+  summary
 
 # PLOT NETWORKS ####
 
@@ -893,38 +942,41 @@ amf_hub_taxa$vertex_id
 
 hub_ps_bact <- 
 bact %>% 
+  transform_sample_counts(ra) %>% 
   subset_taxa(taxa_names(bact) %in% bact_hub_taxa$vertex_id)
 hub_ps_fung <- 
-fung %>% 
+fung %>%
+  transform_sample_counts(ra) %>% 
   subset_taxa(taxa_names(fung) %in% fung_hub_taxa$vertex_id)
 hub_ps_amf <- 
 amf %>% 
+  transform_sample_counts(ra) %>% 
   subset_taxa(taxa_names(amf) %in% amf_hub_taxa$vertex_id)
 
 
 # Look at (relative) abundance of hub taxa vs plant health
 
 # add # of hub taxa present to metadata
-bact@sam_data$hubs_bact <- 
-  hub_ps_bact %>% 
-  estimate_richness(measures = "Observed") %>% 
-  rename("bact_hub_taxa" = "Observed") %>% 
-  mutate(sample_name = row.names(.)) %>% 
-  pluck("bact_hub_taxa")
-
-fung@sam_data$hubs_fung <- 
-  hub_ps_fung %>% 
-  estimate_richness(measures = "Observed") %>% 
-  rename("fung_hub_taxa" = "Observed") %>% 
-  mutate(sample_name = row.names(.)) %>% 
-  pluck("fung_hub_taxa")
-
-amf@sam_data$hubs_amf <- 
-  hub_ps_amf %>% 
-  estimate_richness(measures = "Observed") %>% 
-  rename("amf_hub_taxa" = "Observed") %>% 
-  mutate(sample_name = row.names(.)) %>% 
-  pluck("amf_hub_taxa")
+# bact@sam_data$hubs_bact <- 
+#   hub_ps_bact %>% 
+#   estimate_richness(measures = "Observed") %>% 
+#   rename("bact_hub_taxa" = "Observed") %>% 
+#   mutate(sample_name = row.names(.)) %>% 
+#   pluck("bact_hub_taxa")
+# 
+# fung@sam_data$hubs_fung <- 
+#   hub_ps_fung %>% 
+#   estimate_richness(measures = "Observed") %>% 
+#   rename("fung_hub_taxa" = "Observed") %>% 
+#   mutate(sample_name = row.names(.)) %>% 
+#   pluck("fung_hub_taxa")
+# 
+# amf@sam_data$hubs_amf <- 
+#   hub_ps_amf %>% 
+#   estimate_richness(measures = "Observed") %>% 
+#   rename("amf_hub_taxa" = "Observed") %>% 
+#   mutate(sample_name = row.names(.)) %>% 
+#   pluck("amf_hub_taxa")
 
 b <- 
   bact %>% 
@@ -956,7 +1008,7 @@ hubs_and_plants_df <-
 
 # set up variables
 variables <- names(sample_data(bact))
-plant_measures <- c("wilting_scale","bud_number","leaf_number","leaf_length","height")
+plant_measures <- c("leaf_number","shoot_dm","final_root_dm")
 soil_variables <- grep("mean_",variables,value=TRUE)  
 predictors <- c("drought","inoculum_site","fire_freq","host")
 
@@ -973,6 +1025,46 @@ mutate(across(all_of(plant_measures),compositions::scale)) %>%
 saveRDS(p, file="./Output/figs/Hub_Taxa_vs_Plant_Health.RDS")
 p <- readRDS("./Output/figs/Hub_Taxa_vs_Plant_Health.RDS")
 
+
+# Who are the hub taxa?
+bacterial_hub_taxa <- 
+  data.frame(ASV=taxa_names(hub_ps_bact),
+             Taxonomy=corncob::otu_to_taxonomy(taxa_names(hub_ps_bact),hub_ps_bact),
+             Amplicon="Bacteria")
+fungal_hub_taxa <- 
+  data.frame(ASV=taxa_names(hub_ps_fung),
+             Taxonomy=corncob::otu_to_taxonomy(taxa_names(hub_ps_fung),hub_ps_fung),
+             Amplicon="Fungi")
+amf_hub_taxa <- 
+  data.frame(ASV=taxa_names(hub_ps_amf),
+             Taxonomy=corncob::otu_to_taxonomy(taxa_names(hub_ps_amf),hub_ps_amf),
+             Amplicon="AMF")
+full_hub_taxa_df <- 
+bacterial_hub_taxa %>% 
+  full_join(fungal_hub_taxa) %>% 
+  full_join(amf_hub_taxa)
+write_csv(full_hub_taxa_df,"./Output/Full_HubTaxa_List.csv")
+
+hub_ps_amf %>% 
+  psmelt() %>% 
+  mutate(Moisture=case_when(drought=="ND"~"High",drought=="D"~"Low"),
+         growth_response = final_root_dm + shoot_dm) %>% 
+  lmer(data=.,formula=growth_response ~ Abundance * Moisture + (1|block)) %>% 
+  summary
+
+hub_ps_bact %>% 
+  psmelt() %>% 
+  mutate(Moisture=case_when(drought=="ND"~"High",drought=="D"~"Low"),
+         growth_response = final_root_dm + shoot_dm) %>% 
+  lmer(data=.,formula=growth_response ~ Abundance * Moisture * species + (1|block)) %>% 
+  summary
+
+hub_ps_fung %>% 
+  psmelt() %>% 
+  mutate(Moisture=case_when(drought=="ND"~"High",drought=="D"~"Low"),
+         growth_response = final_root_dm + shoot_dm) %>% 
+  lmer(data=.,formula=growth_response ~ Abundance * Moisture * species + (1|block)) %>% 
+  summary
 
 # full_hubs <- 
 # full %>% 
