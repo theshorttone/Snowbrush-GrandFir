@@ -509,6 +509,27 @@ print(paste("PermANOVA significant explanatory power of:",permanova_results %>%
               pluck("R2") %>% 
               sum() %>% round(4)))
 
+
+# permanova seprately for each host...
+gf_rows <- which(adonis_df$host == "Abies grandis")
+sb_rows <- which(adonis_df$host == "Ceanothus velutinus")
+gf_adonis_df <- adonis_df[gf_rows,]
+sb_adonis_df <- adonis_df[sb_rows,]
+
+gf_permanova_results <- 
+  adonis2(data = adonis_df,
+          formula = ra_table[gf_rows,] ~ gf_adonis_df$inoculum_site * gf_adonis_df$drought * gf_adonis_df$fire_freq, strata = gf_adonis_df$block) %>% 
+  broom::tidy() %>% 
+  mutate(term = term %>% str_remove_all("gf_adonis_df\\$"))
+saveRDS(gf_permanova_results,"./Output/ITS_Permanova_Table_gf-only.RDS")
+
+sb_permanova_results <- 
+  adonis2(data = adonis_df,
+          formula = ra_table[sb_rows,] ~ sb_adonis_df$inoculum_site * sb_adonis_df$drought * sb_adonis_df$fire_freq, strata = sb_adonis_df$block) %>% 
+  broom::tidy() %>% 
+  mutate(term = term %>% str_remove_all("sb_adonis_df\\$"))
+saveRDS(sb_permanova_results,"./Output/ITS_Permanova_Table_sb-only.RDS")
+
 # FIND IMPORTANT TAXA ####
 
 ### Do this at the genus level to account for multiple ASVs per species
