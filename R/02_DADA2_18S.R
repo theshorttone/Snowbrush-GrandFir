@@ -70,7 +70,7 @@ ggsave("./Output/figs/AMF_unfiltered_quality_plots.png",dpi=300,height = 6,width
 filts_f <- file.path("./Data/Filtered/18S", paste0(sample.names, "_FWD_filt.fastq.gz"))
 filts_r <- file.path("./Data/Filtered/18S", paste0(sample.names, "_REV_filt.fastq.gz"))
 
-# this is the actual qualit control step
+# this is the actual quality control step
 # These values are informed by our quality plots
 out <- filterAndTrim(fns, filts_f, rns, filts_r, # input and output file names as denoted above
                      maxN=0, # uncalled bases are currently not supported in dada2
@@ -147,8 +147,9 @@ seqtab <- makeSequenceTable(mergers)
 seqtab.nochim <- removeBimeraDenovo(seqtab, method="consensus", multithread=TRUE, verbose=TRUE)
 saveRDS(seqtab.nochim,"./Output/18S_seqtab.nochim.RDS")
 seqtab.nochim <- readRDS("./Output/18S_seqtab.nochim.RDS")
-sum(seqtab.nochim)/sum(seqtab)
 
+sum(seqtab.nochim)/sum(seqtab)
+dim(seqtab.nochim)
 # reassign "out" to remove any missing reads
 out <- readRDS("./Output/18S_trackreads.RDS")
 out <- out[as.data.frame(out)$reads.out > 0,]
@@ -170,13 +171,12 @@ write.csv(track, file = "./Output/18S_read_counts_at_each_step.csv", row.names =
 meta <- read_csv("./Data/Sample_Metadata_Full.csv") %>% 
   janitor::clean_names() %>% 
   dplyr::filter(amplicon == "18S") # just bacteria samples for this
+meta$sample_name %>% duplicated
 # subset to match seq table sample names
 meta <- meta[meta$sample_name %in% (sample.names %>% str_split("_") %>% map_chr(1)), ]
+duplicated(meta$sample_name)
 row.names(seqtab.nochim) <- row.names(seqtab.nochim) %>% str_split("_") %>% map_chr(1)
 row.names(meta) <- meta$sample_name
-
-
-
 
 negative_ctls <- grep("AMF-N",meta$sample_name,value = TRUE)
 positive_ctls <- grep("AMF-P",meta$sample_name,value = TRUE)
@@ -199,13 +199,21 @@ seqtab.nochim <- seqtab.nochim[!row.names(seqtab.nochim) %in% negative_ctls,]
 df <- data.frame(seqtab_rows=row.names(seqtab.nochim),
                  sample_name=row.names(seqtab.nochim))
 df2 <- left_join(meta,df,by="sample_name")
+
+duplicated(df2$sample_name)
 row.names(df2) <- df2$sample_name
+
+duplicated(df2$sample_name)
 row.names(meta) <- meta$sample_name
+duplicated(row.names(seqtab.nochim))
 meta <- meta[row.names(seqtab.nochim),]
+
+
 row.names(meta) <- meta$sample_name
+meta$sample_name[duplicated(meta$sample_name)]
+duplicated(row.names(seqtab.nochim))
 
 identical(row.names(meta),row.names(seqtab.nochim))
-
 
 # Remove all seqs with fewer than 100 nucleotides (if any) ####
 keeper_esvs <- nchar(names(as.data.frame(seqtab.nochim))) > 99
@@ -220,8 +228,8 @@ saveRDS(seqtab.nochim,"./Output/18S_seqtab.nochim.clean.RDS")
 # ASSIGN TAXONOMY ####
 
 # prepare PR2 + Marjaam combined database
-maarjam <- readFasta("./Taxonomy/maarjam_database_SSU.fasta")
-pr2 <- readFasta("./Taxonomy/pr2_version_5.0.0_SSU_dada2.fasta")
+maarjam <- readFasta("./Taxonomy/maarjam_database_SSU.fasta.gz")
+pr2 <- readFasta("./Taxonomy/pr2_version_5.0.0_SSU_dada2.fasta.gz")
 
 # fix maarjam headers to match pr2 format
 maarjam_headers_pt1 <- 
@@ -263,8 +271,11 @@ writeFasta(object = maarjam,
            file = "./Taxonomy/combined_pr2-maarjam_reference.fasta",
            mode = 'a',
            width=longest_read)
+beepr::beep(sound=8)
 
-
+# check out taxaonomic assignments of just taxa found in positive controls...
+# using both databases
+seqtab.posctl <- seqtab.posctl[,which(colSums(seqtab.posctl) > 0)]
 
 # Use RDP training set for 18S
 taxa <- assignTaxonomy(seqtab.nochim, 
@@ -273,23 +284,77 @@ taxa <- assignTaxonomy(seqtab.nochim,
                        taxLevels = c("Kingdom","Supergroup","Division","Class","Order","Family","Genus","Species"),
                        tryRC = TRUE,
                        verbose = TRUE)
-
+pos.taxa <- assignTaxonomy(seqtab.posctl, 
+                           "./Taxonomy/combined_pr2-maarjam_reference.fasta", 
+                           multithread=nthreads,
+                           taxLevels = c("Kingdom","Supergroup","Division","Class","Order","Family","Genus","Species"),
+                           tryRC = TRUE,
+                           verbose = TRUE)
+    
 # Save intermediate taxonomy file
 saveRDS(taxa, file = "./Output/18S_RDP_Taxonomy_from_dada2.RDS")
+saveRDS(pos.taxa, file = "./Output/18S_postive_ctl_RDP_Taxonomy_from_dada2.RDS")
 
+beepr::beep(sound=8)
 
+# Use Eukaryome training set for 18S (reformatted for RDP Classifier to remove leading accession and replace | with ; )
+# zcat Eukaryome_General_SSU_v1.8.fasta.gz | sed 's/>[^|]*|/>/' | sed 's/|/;/g' > Eukaryome_General_SSU_v1.8.reformat.fasta; gzip Eukaryome_General_SSU_v1.8.reformat.fasta
+taxa2 <- assignTaxonomy(seqtab.nochim, 
+                       "./Taxonomy/Eukaryome_General_SSU_v1.8.reformat.fasta.gz", 
+                       multithread=nthreads,
+                       taxLevels = c("Kingdom","Phylum","Class","Order","Family","Genus","Species"),
+                       tryRC = TRUE,
+                       verbose = TRUE)
+
+pos.taxa2 <- assignTaxonomy(seqtab.posctl, 
+                        "./Taxonomy/Eukaryome_General_SSU_v1.8.reformat.fasta.gz", 
+                        multithread=nthreads,
+                        taxLevels = c("Kingdom","Phylum","Class","Order","Family","Genus","Species"),
+                        tryRC = TRUE,
+                        verbose = TRUE)
+
+# Save intermediate taxonomy file
+saveRDS(taxa, file = "./Output/18S_RDP_Taxonomy_from_dada2_Eukaryome.RDS")
+saveRDS(pos.taxa2, file = "./Output/18S_RDP_positive_ctl_Taxonomy_from_dada2_Eukaryome.RDS")
+beepr::beep(sound=8)
 # inspect taxonomy
 taxa.print <- taxa # Removing sequence rownames for display only
 rownames(taxa.print) <- NULL
 head(taxa.print)
+taxa.print2 <- taxa2 # Removing sequence rownames for display only
+rownames(taxa.print2) <- NULL
+head(taxa.print2)
 
 
 # Hand off to Phyloseq ####
 otu <- otu_table(seqtab.nochim,taxa_are_rows = FALSE)
-tax <- tax_table(taxa)
+tax <- tax_table(taxa2)
 met <- sample_data(meta)
 sample_names(met) <- meta$sample_name
 
+pos.meta <- meta[grepl("^AMF-P",meta$sample_name),]
+pos.met <- sample_data(pos.meta)
+sample_names(pos.met) <- pos.meta$sample_name
+pos.tax.marjaam <- tax_table(pos.taxa)
+pos.tax.eukaryome <- tax_table(pos.taxa2)
+pos.otu <- otu_table(seqtab.posctl,taxa_are_rows = FALSE)
+
+pos.ps.marjaam <- phyloseq(pos.otu,pos.tax.marjaam,pos.met)
+pos.ps.eukaryome <- phyloseq(pos.otu,pos.tax.eukaryome,pos.met)
+saveRDS(pos.ps.marjaam,"./Output/18S_pos_ctl_marjaam_physeq.RDS")
+saveRDS(pos.ps.eukaryome,"./Output/18S_pos_ctl_eukaryome_physeq.RDS")
+
+
 ps <- phyloseq(otu,met,tax)
 saveRDS(ps,"./Output/18S_ps_not-cleaned.RDS")
-ps
+saveRDS(ps,"./Output/18S_ps_not-cleaned_eukaryome.RDS")
+
+# build marjaam version of 18S physeq
+tax <- tax_table(taxa)
+ps2 <- phyloseq(otu,met,tax)
+saveRDS(ps2,"./Output/18S_ps_not-cleaned_marjaam.RDS")
+
+
+
+
+

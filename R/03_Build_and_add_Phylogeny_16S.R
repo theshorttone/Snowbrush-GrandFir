@@ -30,6 +30,7 @@ library(ape); packageVersion("ape")
 library(seqinr); packageVersion("seqinr")
 library(DECIPHER); packageVersion("DECIPHER")
 library(parallel); packageVersion("parallel")
+library(ShortRead)
 # library(fastreeR); packageVersion("fastreeR")
 
 # number of threads for parallel processing
@@ -38,6 +39,23 @@ nthreads <- parallel::detectCores() - 1
 # Read in phyloseq object from first script output ####
 ps <- readRDS("./Output/16S_ps_not-cleaned.RDS")
 
+# do AMF tree ####
+AMFbackbone <- readFasta("./Taxonomy/0.231raw.fas")
+p5 <- read_csv("./Output/AMF_P5_taxonomy.csv")
+p5 <- DNAStringSet(p5$asv)
+names(p5) <- paste0("P5_ASV_",1:6)
+backbone <- DNAStringSet(AMFbackbone@sread)
+names(backbone) <- AMFbackbone@id
+
+full <- c(p5,backbone)
+decipher_alignment <- DECIPHER::AlignSeqs(full, processors = parallel::detectCores() - 1,verbose = TRUE) # DECIPHER method
+adj_decipher_alignment <- DECIPHER::AdjustAlignment(decipher_alignment,processors = parallel::detectCores() - 1)
+dm <- DECIPHER::DistanceMatrix(adj_decipher_alignment)
+nj_tree <- nj(dm)
+plot(nj_tree,cex=.1)
+write.tree(nj_tree,"./Taxonomy/nj_tree_p5.nwk")
+
+ggtree::ggtree(nj_tree)
 
 # simplify ASV names
 seqs <- rownames(tax_table(ps))

@@ -5,6 +5,8 @@ library(patchwork)
 library(janitor)
 library(lmerTest)
 library(broom)
+library(microbiome)
+library(phyloseq)
 # # functions ####
 # scales_add_defaults <- function(scales, data, aesthetics, env) {
 #   if (is.null(aesthetics)) return()
@@ -91,7 +93,34 @@ inoc_colors <- c("#4cbfe6","#2443f0",
                  "gray20")
 # data ####
 # load plant time series data
-plants <- read_csv("./Data/MasterMeasurement_Sep_Sheet1.csv") %>% clean_names()
+# plant growth data
+plants <- 
+  readRDS("./Output/phyloseq_objects/16S_clean_phyloseq_object_w_guilds.RDS") %>% 
+  meta() %>% 
+  dplyr::select(unique_id,sample_name,block,leaf_number,wilting_scale,species,
+                burn_frequency = fire_freq,
+                soil_inoculum = inoculum,
+                drought_trt = drought) %>% 
+  mutate(host = case_when(species == "GrandFir" ~ "Abies grandis",
+                          species == "Snowbrush" ~ "Ceanothus velutinus"))
+
+scaled_plantgrowth <-
+  plants %>%
+  group_by(host) %>%
+  reframe(plantgrowth = scale(leaf_number)) %>%
+  pluck("plantgrowth")
+plants$scaled_plantgrowth <- c(scaled_plantgrowth) %>% as.numeric()
+plants$inoc_source <-   
+  ifelse(grepl("_W",plants$soil_inoculum),plants$soil_inoculum,"_Sterile") %>% 
+  str_split("_") %>% 
+  map_chr(2) %>% 
+  str_remove("W")
+# plants <- plants %>% dplyr::filter(month == "Aug" & !is.na(unique_id))
+
+plants <- 
+  plants %>% 
+  dplyr::mutate(fung_sample_name = unique_id %>% str_replace("Q","F-R-"),
+                bact_sample_name = unique_id %>% str_replace("Q","R-"))
 
 # load ordination plots
 grandfir_bact_ord_plot <- readRDS("./Output/grandfir_bact_ord_plot.RDS") + theme(axis.title = element_blank()) + labs(y="Bacteria") + theme(axis.title.y = element_text(face='bold',size=14))
@@ -103,105 +132,76 @@ snowbrush_18S_ord_plot <- readRDS("./Output/snowbrush_18S_ord_plot.RDS") + theme
 
 # clean plant data
 names(plants)
-plants <- 
-plants %>% 
-  dplyr::select(all_of(c("unique_id","block","unique_id_2","block_2","seed_species","drought_trt","soil_inoculum","burn_frequency")),
-                contains("leaf_num")) %>% 
-  pivot_longer(contains("leaf_num"),names_to = "month",values_to = "leaf_number") %>% 
-  mutate(month = month %>% str_remove("tru.*_leaf_num_") %>% str_to_sentence() %>% str_replace("June","Jun")) %>% 
-  mutate(month = factor(month, levels = c("Nov","Dec","Jan","Feb","Mar","May","Jun","Aug"))) %>% 
-  # mutate(plantgrowth = scale(leaf_number)[,1]) %>% 
-  mutate(host = case_when(seed_species == "GrandFir" ~ "Abies grandis",
-                          seed_species == "Snowbrush" ~ "Ceanothus velutinus"))
-
-scaled_plantgrowth <- 
-plants %>% 
-  group_by(host) %>% 
-  summarize(plantgrowth = scale(leaf_number)) %>% 
-  pluck("plantgrowth")
-plants$scaled_plantgrowth <- c(scaled_plantgrowth) %>% as.numeric()
-
-plant_means <- 
-plants %>% 
-  group_by(host,drought_trt,month) %>% 
-  summarize(plantgrowth = mean(scale(leaf_number)[,1]))
-
-plants$inoc_source <-   
-ifelse(grepl("_W",plants$soil_inoculum),plants$soil_inoculum,"_Sterile") %>% 
-  str_split("_") %>% 
-  map_chr(2) %>% 
-  str_remove("W")
-
 
 # plot plant growth over time
-plants %>% 
-  dplyr::filter(!is.na(host)) %>% 
-  ggplot(aes(x=month,y=scaled_plantgrowth,color=drought_trt)) +
-  geom_jitter(size=3,width = .2,alpha=.25) +
-  geom_boxplot(alpha=.2,size=1.5,fill='black') +
-  facet_wrap(~host,ncol = 2) +
-  scale_color_manual(values = drought_colors,labels=c("Low","High")) +
-  labs(color="Moisture",x="\nTimepoint",y="Scaled plant growth") +
-  theme_bw() +
-  theme(strip.text = element_text(face='bold.italic',size=18),
-        strip.background = element_blank(),
-        legend.title = element_text(face='bold',size=16),
-        legend.text = element_text(face='bold',size=14),
-        axis.title = element_text(face='bold',size=14),
-        axis.text.x = element_text(face='bold',size=10,angle=90,hjust=1,vjust=.5))
-ggsave("./Output/figs/plantgrowth_time_series_host.png",dpi=300,height = 6,width = 10)
+# plants %>% 
+#   dplyr::filter(!is.na(host)) %>% 
+#   ggplot(aes(x=month,y=scaled_plantgrowth,color=drought_trt)) +
+#   geom_jitter(size=3,width = .2,alpha=.25) +
+#   geom_boxplot(alpha=.2,size=1.5,fill='black') +
+#   facet_wrap(~host,ncol = 2) +
+#   scale_color_manual(values = drought_colors,labels=c("Low","High")) +
+#   labs(color="Moisture",x="\nTimepoint",y="Scaled plant growth") +
+#   theme_bw() +
+#   theme(strip.text = element_text(face='bold.italic',size=18),
+#         strip.background = element_blank(),
+#         legend.title = element_text(face='bold',size=16),
+#         legend.text = element_text(face='bold',size=14),
+#         axis.title = element_text(face='bold',size=14),
+#         axis.text.x = element_text(face='bold',size=10,angle=90,hjust=1,vjust=.5))
+# ggsave("./Output/figs/plantgrowth_time_series_host.png",dpi=300,height = 6,width = 10)
 
 
-plants %>% 
-  dplyr::filter(!is.na(host)) %>% 
-  ggplot(aes(x=month,y=scaled_plantgrowth,color=drought_trt)) +
-  geom_jitter(size=3,width = .2,alpha=.25) +
-  geom_boxplot(alpha=.2,size=1.5,fill='black') +
-  facet_wrap(~inoc_source) +
-  scale_color_manual(values = drought_colors,labels=c("Low","High")) +
-  labs(color="Moisture",x="\nTimepoint",y="Scaled plant growth") +
-  theme_bw() +
-  theme(strip.text = element_text(face='bold.italic',size=18),
-        strip.background = element_blank(),
-        legend.title = element_text(face='bold',size=16),
-        legend.text = element_text(face='bold',size=14),
-        axis.title = element_text(face='bold',size=14),
-        axis.text.x = element_text(face='bold',size=10,angle=90,hjust=1,vjust=.5))
-ggsave("./Output/figs/plantgrowth_time_series_inoc.png",dpi=300,height = 6,width = 10)
-plants$host
-plants %>% 
-  dplyr::filter(!is.na(host) & host == "Abies grandis") %>% 
-  ggplot(aes(x=month,y=scaled_plantgrowth,color=drought_trt)) +
-  geom_jitter(size=3,width = .2,alpha=.25) +
-  geom_boxplot(alpha=.2,size=1.5,fill='black') +
-  facet_wrap(~inoc_source) +
-  scale_color_manual(values = drought_colors,labels=c("Low","High")) +
-  labs(color="Moisture",x="\nTimepoint",y="Scaled plant growth") +
-  theme_bw() +
-  theme(strip.text = element_text(face='bold.italic',size=18),
-        strip.background = element_blank(),
-        legend.title = element_text(face='bold',size=16),
-        legend.text = element_text(face='bold',size=14),
-        axis.title = element_text(face='bold',size=14),
-        axis.text.x = element_text(face='bold',size=10,angle=90,hjust=1,vjust=.5))
-
-plants %>% 
-  dplyr::filter(!is.na(host) & host == "Ceanothus velutinus") %>% 
-  ggplot(aes(x=month,y=scaled_plantgrowth,color=drought_trt,fill=drought_trt)) +
-  geom_jitter(size=1,width = .2,alpha=.25) +
-  geom_boxplot(alpha=.5,size=1.5) +
-  facet_wrap(~inoc_source) +
-  scale_color_manual(values = drought_colors,labels=c("Low","High")) +
-  scale_fill_manual(values = drought_colors,guide='none') +
-  labs(color="Moisture",x="\nTimepoint",y="Scaled plant growth") +
-  theme_bw() +
-  theme(strip.text = element_text(face='bold.italic',size=18),
-        strip.background = element_blank(),
-        legend.title = element_text(face='bold',size=16),
-        legend.text = element_text(face='bold',size=14),
-        axis.title = element_text(face='bold',size=14),
-        axis.text.x = element_text(face='bold',size=10,angle=90,hjust=1,vjust=.5))
-
+# plants %>% 
+#   dplyr::filter(!is.na(host)) %>% 
+#   ggplot(aes(x=month,y=scaled_plantgrowth,color=drought_trt)) +
+#   geom_jitter(size=3,width = .2,alpha=.25) +
+#   geom_boxplot(alpha=.2,size=1.5,fill='black') +
+#   facet_wrap(~inoc_source) +
+#   scale_color_manual(values = drought_colors,labels=c("Low","High")) +
+#   labs(color="Moisture",x="\nTimepoint",y="Scaled plant growth") +
+#   theme_bw() +
+#   theme(strip.text = element_text(face='bold.italic',size=18),
+#         strip.background = element_blank(),
+#         legend.title = element_text(face='bold',size=16),
+#         legend.text = element_text(face='bold',size=14),
+#         axis.title = element_text(face='bold',size=14),
+#         axis.text.x = element_text(face='bold',size=10,angle=90,hjust=1,vjust=.5))
+# ggsave("./Output/figs/plantgrowth_time_series_inoc.png",dpi=300,height = 6,width = 10)
+# plants$host
+# plants %>% 
+#   dplyr::filter(!is.na(host) & host == "Abies grandis") %>% 
+#   ggplot(aes(x=month,y=scaled_plantgrowth,color=drought_trt)) +
+#   geom_jitter(size=3,width = .2,alpha=.25) +
+#   geom_boxplot(alpha=.2,size=1.5,fill='black') +
+#   facet_wrap(~inoc_source) +
+#   scale_color_manual(values = drought_colors,labels=c("Low","High")) +
+#   labs(color="Moisture",x="\nTimepoint",y="Scaled plant growth") +
+#   theme_bw() +
+#   theme(strip.text = element_text(face='bold.italic',size=18),
+#         strip.background = element_blank(),
+#         legend.title = element_text(face='bold',size=16),
+#         legend.text = element_text(face='bold',size=14),
+#         axis.title = element_text(face='bold',size=14),
+#         axis.text.x = element_text(face='bold',size=10,angle=90,hjust=1,vjust=.5))
+# 
+# plants %>% 
+#   dplyr::filter(!is.na(host) & host == "Ceanothus velutinus") %>% 
+#   ggplot(aes(x=month,y=scaled_plantgrowth,color=drought_trt,fill=drought_trt)) +
+#   geom_jitter(size=1,width = .2,alpha=.25) +
+#   geom_boxplot(alpha=.5,size=1.5) +
+#   facet_wrap(~inoc_source) +
+#   scale_color_manual(values = drought_colors,labels=c("Low","High")) +
+#   scale_fill_manual(values = drought_colors,guide='none') +
+#   labs(color="Moisture",x="\nTimepoint",y="Scaled plant growth") +
+#   theme_bw() +
+#   theme(strip.text = element_text(face='bold.italic',size=18),
+#         strip.background = element_blank(),
+#         legend.title = element_text(face='bold',size=16),
+#         legend.text = element_text(face='bold',size=14),
+#         axis.title = element_text(face='bold',size=14),
+#         axis.text.x = element_text(face='bold',size=10,angle=90,hjust=1,vjust=.5))
+# 
 
 ordplots <- 
 (grandfir_fungi_ord_plot + snowbrush_fungi_ord_plot) / (grandfir_bact_ord_plot + snowbrush_bact_ord_plot) +
@@ -215,12 +215,13 @@ grandfir_fungi_ord_plot2 <- grandfir_fungi_ord_plot
 snowbrush_fungi_ord_plot2 <- snowbrush_fungi_ord_plot
 grandfir_bact_ord_plot2 <- grandfir_bact_ord_plot 
 snowbrush_bact_ord_plot2 <- snowbrush_bact_ord_plot 
-
+snowbrush_18S_ord_plot2 <- snowbrush_18S_ord_plot
 # remove the ellipses
 grandfir_fungi_ord_plot2$layers[[2]] <- NULL 
 snowbrush_fungi_ord_plot2$layers[[2]] <- NULL
 grandfir_bact_ord_plot2$layers[[2]] <- NULL
 snowbrush_bact_ord_plot2$layers[[2]] <- NULL
+snowbrush_18S_ord_plot2$layers[[2]] <- NULL
 
 # add new columns to data for separate ellipses
 grandfir_fungi_ord_plot2$data$newgroup <- 
@@ -231,6 +232,8 @@ grandfir_bact_ord_plot2$data$newgroup <-
   ifelse(grandfir_bact_ord_plot2$data$inoculum_site == "Sterile","Uninoculated","Inoculated")
 snowbrush_bact_ord_plot2$data$newgroup <- 
   ifelse(snowbrush_bact_ord_plot2$data$inoculum_site == "Sterile","Uninoculated","Inoculated")
+snowbrush_18S_ord_plot2$data$newgroup <- 
+  ifelse(snowbrush_18S_ord_plot2$data$inoculum_site == "Sterile","Uninoculated","Inoculated")
 
 grandfir_fungi_ord_plot2$data$inoculum_site %>% unique()
 
@@ -271,56 +274,42 @@ snowbrush_bact_ord_plot2 <- snowbrush_bact_ord_plot2 +
        legend.title = element_text(face='bold',size=16), axis.title.y = element_blank(),
        legend.text = element_text(face='bold',size=14))
 
+snowbrush_amf_ord_plot2 <- snowbrush_18S_ord_plot2 +
+  stat_ellipse(aes(linetype=newgroup,group=newgroup)) +
+  scale_linetype_manual(values = c(1,212)) +
+  labs(linetype = "Inoculation", title = "",y="") +
+  scale_color_manual(values = inoc_colors, labels = as.character(c(1:6,"Uninoculated"))) +
+  theme(axis.text = element_blank(), 
+        axis.ticks = element_blank(),
+        panel.grid = element_blank(), 
+        legend.title = element_text(face='bold',size=16), 
+        legend.text = element_text(face='bold',size=14))
 
+spacer <- ggplot() +
+  theme_void() +
+  theme(axis.title.y = element_text(face='bold',size=18,angle = 90),
+        legend.position = 'none',
+        line = element_blank()) +
+  labs(y="AMF")
+spacer
 
 # see plot without ALL ellipses
-ordplots <- (grandfir_fungi_ord_plot2 + snowbrush_fungi_ord_plot2) / (grandfir_bact_ord_plot2 + snowbrush_bact_ord_plot2) +
+ordplots <- (grandfir_fungi_ord_plot2 + snowbrush_fungi_ord_plot2) / (grandfir_bact_ord_plot2 + snowbrush_bact_ord_plot2) / (spacer + snowbrush_amf_ord_plot2)+
   plot_layout(guides = 'collect') # + plot_annotation(tag_levels = "A")
 
 
 # make top half of figure (boxplots of plant growth)
 
-
+plants$species
 # first, find significant differences
-aug <- plants %>% 
-  dplyr::filter(month == "Aug" & !is.na(unique_id))
-
-gf <- 
-  aug %>% 
-  dplyr::filter(host == "Abies grandis")
-sb <- 
-  aug %>% 
-  dplyr::filter(host == "Ceanothus velutinus")
-
-# gf_lmer <- 
-#   lmer(data = gf, formula = leaf_number ~ drought_trt + (1|inoc_source))
-# summary(gf_lmer)
-
-# sb_lmer <- 
-#   lmer(data = sb, formula = leaf_number ~ drought_trt + (1|inoc_source))
-# summary(sb_lmer)
-# 
-# tuk <- aov(data=sb,formula = leaf_number ~ drought_trt * inoc_source) %>% 
-#   TukeyHSD()
-# tuk$`drought_trt:inoc_source` %>% 
-#   as.data.frame() %>% 
-#   dplyr::filter(`p adj` < 0.05)
-
-
-
-
-plants %>% names
-plants$drought_trt
-
 grandfir_plants_plot <- 
   plants %>% 
   mutate(inoc_source = case_when(inoc_source == "Sterile" ~ "Uninoculated",TRUE ~ inoc_source),
          burn_frequency = paste0(burn_frequency," Burn"),
          Moisture = case_when(drought_trt == "D" ~ "Low",drought_trt == "ND" ~ "High")) %>%
   mutate(combo = paste0(inoc_source,"_",Moisture)) %>% 
-  dplyr::filter(seed_species == "GrandFir") %>% 
-  dplyr::filter(month == "Aug") %>% 
-  ggplot(aes(x=combo,y=scaled_plantgrowth,fill=inoc_source,color=inoc_source)) +
+  dplyr::filter(species == "GrandFir") %>% 
+  ggplot(aes(x=combo,y=scale(leaf_number),fill=inoc_source,color=inoc_source)) +
   geom_jitter(width = .1,alpha=.1) +
   geom_boxplot(color='black',linewidth=.2,alpha=c(rep(c(1,0.2),7))) +
   scale_color_manual(values = rep(inoc_colors,2),guide='none') +
@@ -329,10 +318,10 @@ grandfir_plants_plot <-
   labs(fill="Inoculum source",
        y="Scaled\nplant growth",
        title = "") +
-  annotate('text',x=2.5,y=6,label="0 Burn",size=6,fontface='bold') +
-  annotate('text',x=6.5,y=6,label="1 Burn",size=6,fontface='bold') +
-  annotate('text',x=10.5,y=6,label="3 Burn",size=6,fontface='bold') +
-  coord_cartesian(ylim=c(min(plants$scaled_plantgrowth,na.rm=TRUE),6.5)) +
+  annotate('text',x=2.5,y=5,label="0 Burn",size=6,fontface='bold') +
+  annotate('text',x=6.5,y=5,label="1 Burn",size=6,fontface='bold') +
+  annotate('text',x=10.5,y=5,label="3 Burn",size=6,fontface='bold') +
+  coord_cartesian(ylim=c(min(plants$scaled_plantgrowth,na.rm=TRUE),6)) +
   theme_bw() +
   theme(axis.text.x = element_blank(),
         legend.title = element_text(face='bold',size=16),
@@ -350,9 +339,8 @@ snowbrush_plants_plot <-
          burn_frequency = paste0(burn_frequency," Burn"),
          Moisture = case_when(drought_trt == "D" ~ "Low",drought_trt == "ND" ~ "High")) %>%
   mutate(combo = paste0(inoc_source,"_",Moisture)) %>% 
-  dplyr::filter(seed_species == "Snowbrush") %>% 
-  dplyr::filter(month == "Aug") %>% 
-  ggplot(aes(x=combo,y=scaled_plantgrowth,fill=inoc_source,color=inoc_source)) +
+  dplyr::filter(species == "Snowbrush") %>% 
+  ggplot(aes(x=combo,y=scale(leaf_number),fill=inoc_source,color=inoc_source)) +
   geom_jitter(width = .1,alpha=.1) +
   geom_boxplot(color='black',linewidth=.2,alpha=c(rep(c(1,0.2),7))) +
   scale_color_manual(values = rep(inoc_colors,2),guide='none') +
@@ -361,10 +349,10 @@ snowbrush_plants_plot <-
   labs(fill="Inoculum source",
        y="Scaled\nplant growth",
        title = "") +
-  annotate('text',x=2.5,y=6,label="0 Burn",size=6,fontface='bold') +
-  annotate('text',x=6.5,y=6,label="1 Burn",size=6,fontface='bold') +
-  annotate('text',x=10.5,y=6,label="3 Burn",size=6,fontface='bold') +
-  coord_cartesian(ylim=c(min(plants$scaled_plantgrowth,na.rm=TRUE),6.5)) +
+  annotate('text',x=2.5,y=5,label="0 Burn",size=6,fontface='bold') +
+  annotate('text',x=6.5,y=5,label="1 Burn",size=6,fontface='bold') +
+  annotate('text',x=10.5,y=5,label="3 Burn",size=6,fontface='bold') +
+  coord_cartesian(ylim=c(min(plants$scaled_plantgrowth,na.rm=TRUE),6)) +
   theme_bw() +
   theme(axis.text.x = element_blank(),
         legend.title = element_text(face='bold',size=16),
@@ -379,15 +367,22 @@ snowbrush_plants_plot <-
 
 
 barplots <- grandfir_plants_plot | snowbrush_plants_plot 
+barplots
 
 
+
+
+# This ensures that italics remain in saved versions of the plots
 showtext::showtext_auto()
 # showtext::showtext_opts(dpi = 96)
-ordplots / barplots + plot_annotation(tag_levels = 'a') &
+
+# combine all plots into a single figure and add letter annotations
+ordplots / barplots  &
   theme(plot.tag = element_text(face = 'bold',size=18,hjust = .5,vjust = 0))
 
-ggsave("./Output/figs/Figure_3.png",dpi=300,height = 8, width = 12)
-ggsave("./Output/figs/Figure_3.tiff",dpi=300,height = 8, width = 12)
+ggsave("./Output/figs/Figure_3.png",dpi=300,height = 10, width = 12)
+ggsave("./Output/figs/Figure_3.tiff",dpi=300,height = 10, width = 12)
+ggsave("./Output/figs/manuscript_versions/Figure_3.pdf",dpi=600,height =10, width = 12)
 
 m <- 
 gf %>% 
@@ -410,10 +405,13 @@ perm_bact <- readRDS("./Output/16S_Permanova_Table.RDS") %>%
 perm_fung <- readRDS("./Output/ITS_Permanova_Table.RDS") %>% 
   mutate(term=term %>% str_replace("drought","moisture"),amplicon = "ITS2") %>% 
   dplyr::select(amplicon,everything())
+perm_amf <- readRDS("./Output/18S_Permanova_Table.RDS") %>% 
+  mutate(term=term %>% str_replace("drought","moisture"),amplicon = "18S") %>% 
+  dplyr::select(amplicon,everything())
 
 # Table 3 - PermANOVA
-bind_rows(perm_fung,perm_bact) %>% 
-  dplyr::filter(p.value < 0.05) %>% 
+bind_rows(perm_fung,perm_bact,perm_amf) %>% 
+  # dplyr::filter(p.value < 0.05) %>% 
   kableExtra::kable() %>% 
   kableExtra::kable_classic()
 
@@ -423,9 +421,10 @@ fung_gf_perm <- readRDS("./Output/ITS_Permanova_Table_gf-only.RDS") %>% dplyr::m
 fung_sb_perm <- readRDS("./Output/ITS_Permanova_Table_sb-only.RDS") %>% dplyr::mutate(host="Snowbrush",amplicon="ITS2")
 bact_gf_perm <- readRDS("./Output/16S_Permanova_Table_gf-only.RDS") %>% dplyr::mutate(host="Grand fir",amplicon="16S")
 bact_sb_perm <- readRDS("./Output/16S_Permanova_Table_sb-only.RDS") %>% dplyr::mutate(host="Snowbrush",amplicon="16S")
-
+amf_sb_perm <- readRDS("./Output/18S_Permanova_Table.RDS") %>% dplyr::mutate(host="Snowbrush",amplicon="18S")
+amf_sb_perm$df[amf_sb_perm$df == 6] <- 5
 permanova_results_df <- 
-  rbind(fung_gf_perm,fung_sb_perm,bact_gf_perm,bact_sb_perm) %>% 
+  rbind(fung_gf_perm,fung_sb_perm,bact_gf_perm,bact_sb_perm,amf_sb_perm) %>% 
   dplyr::select(amplicon,host,everything()) %>% 
   dplyr::filter(!is.na(p.value)) %>% 
   dplyr::mutate(term = term %>% str_replace("drought","moisture"))
@@ -434,6 +433,7 @@ names(permanova_results_df) <- c("Amplicon","Host","Term","DF","SumOfSqs","R2","
 sig_rows <- which(permanova_results_df$`P value` < 0.05)
 
 permanova_results_df %>% 
+  mutate(Term = Term %>% str_remove("inoculum_")) %>% 
   kableExtra::kable() %>% 
   kableExtra::kable_classic() %>% 
   kableExtra::row_spec(sig_rows,bold = TRUE)

@@ -112,8 +112,14 @@ amf <- amf %>%
 
 
 # join them for 'full' microbiome (16S + ITS2 + 18S)
-full <- merge_phyloseq(bact,fung,amf)
-sample_names(full)
+bact_genus <- tax_glom(bact,"Genus")
+
+fung2 <- fung
+
+sample_names(fung2) <- fung2@sam_data$sample_name %>% str_remove("F-")
+full <- merge_phyloseq(bact_genus,fung2)
+
+sample_names(bact_genus)
 
 # Barcharts of bact and fung ####
 
@@ -168,10 +174,20 @@ full_ra <- transform_sample_counts(full,function(x){x/sum(x)})
 
 
 
-
+ntaxa(full_ra)
 ## SpiecEasi ####
 se.params <- list(rep.num=20, ncores=(parallel::detectCores()-1))
 
+
+# giant cross-domain network
+se.mb.full <- SpiecEasi::spiec.easi(data = full_ra,
+                                    method='mb',
+                                    sel.criterion = "bstars",
+                                    pulsar.params=se.params)
+saveRDS(se.mb.fung,"./Output/Full_SpiecEasi_out.RDS")
+se.mb.fung <- readRDS("./Output/Full_SpiecEasi_out.RDS")
+
+# fungal
 se.mb.fung <- SpiecEasi::spiec.easi(data = fung,
                                        method='mb',
                                        sel.criterion = "bstars",
@@ -180,7 +196,6 @@ saveRDS(se.mb.fung,"./Output/ITS_SpiecEasi_out.RDS")
 se.mb.fung <- readRDS("./Output/ITS_SpiecEasi_out.RDS")
 
 # run on bacteria grouped by genus
-bact_genus <- tax_glom(bact,"Genus")
 se.mb.bact <- SpiecEasi::spiec.easi(data = bact_genus,
                                        method='mb',
                                        sel.criterion = "bstars",
@@ -203,11 +218,26 @@ fung_igraph <- adj2igraph(getRefit(se.mb.fung),vertex.attr = list(name=taxa_name
 bact_igraph <- adj2igraph(getRefit(se.mb.bact),vertex.attr = list(name=taxa_names(bact_genus)))
 amf_igraph <- adj2igraph(getRefit(se.mb.amf),vertex.attr = list(name=taxa_names(amf)))
 
+fung_igraph2 <- 
+igraph::subgraph(fung_igraph,taxa_names(fung)[fung %>% 
+                                    transform_sample_counts(function(x){x/sum(x)}) %>% 
+                                    taxa_sums() > 0.0008])
+
+bact_igraph2 <- 
+  igraph::subgraph(bact_igraph,taxa_names(bact_genus)[bact_genus %>% 
+                                                  transform_sample_counts(function(x){x/sum(x)}) %>% 
+                                                  taxa_sums() > 0.0027250])
+
 # find putative hub taxa & plot for entire study
 fung_hub_taxa <- hubfindr::find_hubs(graph = fung_igraph,physeq = fung)
 bact_hub_taxa <- hubfindr::find_hubs(graph = bact_igraph,physeq = bact)
 amf_hub_taxa <- hubfindr::find_hubs(graph = amf_igraph,physeq = amf)
 
+fung_hubscores <- igraph::hub_score(fung_igraph2)
+bact_hubscores <- igraph::hub_score(bact_igraph2)
+fung_hub_taxa2 <- names(fung_hubscores$vector[fung_hubscores$vector > .8])
+bact_hub_taxa2 <- names(bact_hubscores$vector[bact_hubscores$vector > .4])
+bact_hubscores$vector %>% plot
 plot_hubs(fung_igraph)
 plot_hubs(bact_igraph)
 plot_hubs(amf_igraph)
@@ -216,6 +246,46 @@ plot_hubs(amf_igraph)
 ## Build subsets ####
 
 ### subset phyloseqs ####
+
+# Do for each plant?????
+# for each unique id, subset to that one sample in a pseq object,
+# then find that subset of the spieceasi network
+# then calculate ALL network properties for it
+# and save in a list/df
+# have to do for fungi and bacteria
+
+
+
+all_plants_fungi_stats <- list()
+for(i in fung@sam_data$sample_name){
+  # build subset on the fly
+  ss <- fung %>% subset_samples(sample_name == i)
+  ss <- ss %>% subset_taxa(taxa_sums(ss) > 0)
+  # find network stats of that subset
+  stat_list <- find_ig_subset_attr(ps.subset = ss,ig.full = fung_igraph)
+  all_plants_fungi_stats[[i]] <- stat_list
+}
+
+all_plants_bact_stats <- list()
+for(i in bact_genus@sam_data$sample_name){
+  # build subset on the fly
+  ss <- bact_genus %>% subset_samples(sample_name == i)
+  ss <- ss %>% subset_taxa(taxa_sums(ss) > 0)
+  # find network stats of that subset
+  stat_list <- find_ig_subset_attr(ps.subset = ss,ig.full = bact_igraph)
+  all_plants_bact_stats[[i]] <- stat_list
+}
+
+# export for Figure 2
+saveRDS(all_plants_fungi_stats,"./Output/all_plants_fungi_network_stats.RDS")
+saveRDS(all_plants_bact_stats,"./Output/all_plants_bacteria_network_stats.RDS")
+
+fung_ig <- all_plants_fungi_stats %>% map('ig')
+bact_ig <- all_plants_bact_stats %>% map('ig')
+
+map(bact_ig[11:20],plot_hubs)
+map(fung_ig[11:20],plot_hubs)
+bact_igraph %>% plot_hubs()
 # fungi
 fung_sb_1 <- fung %>% 
   subset_samples(species == "Snowbrush" & inoculum_site == '1')
@@ -638,7 +708,7 @@ graph_atributes_df <-
 # Save data frame
 saveRDS(graph_atributes_df,"./Output/network_attributes_grouped.RDS")
 
-
+graph_atributes_df <- readRDS("./Output/network_attributes_grouped.RDS")
 
 # PLOT ATTRIBUTES ####
 
@@ -936,24 +1006,24 @@ for(i in 1:nrow(full_network_attributes_df)){
 
 
 # HUB TAXA ####
-bact_hub_taxa$vertex_id
-fung_hub_taxa$vertex_id
-amf_hub_taxa$vertex_id
+# bact_hub_taxa$vertex_id
+# fung_hub_taxa$vertex_id
+# amf_hub_taxa$vertex_id
 
 hub_ps_bact <- 
-bact %>% 
+bact_genus %>% 
   transform_sample_counts(ra) %>% 
-  subset_taxa(taxa_names(bact) %in% bact_hub_taxa$vertex_id)
+  subset_taxa(taxa_names(bact_genus) %in% bact_hub_taxa2)
 hub_ps_fung <- 
 fung %>%
   transform_sample_counts(ra) %>% 
-  subset_taxa(taxa_names(fung) %in% fung_hub_taxa$vertex_id)
+  subset_taxa(taxa_names(fung) %in% fung_hub_taxa2)
 hub_ps_amf <- 
 amf %>% 
   transform_sample_counts(ra) %>% 
   subset_taxa(taxa_names(amf) %in% amf_hub_taxa$vertex_id)
 
-
+hub_ps_bact@tax_table[,6]
 # Look at (relative) abundance of hub taxa vs plant health
 
 # add # of hub taxa present to metadata
@@ -1039,11 +1109,18 @@ amf_hub_taxa <-
   data.frame(ASV=taxa_names(hub_ps_amf),
              Taxonomy=corncob::otu_to_taxonomy(taxa_names(hub_ps_amf),hub_ps_amf),
              Amplicon="AMF")
+
+
 full_hub_taxa_df <- 
 bacterial_hub_taxa %>% 
-  full_join(fungal_hub_taxa) %>% 
-  full_join(amf_hub_taxa)
+  full_join(fungal_hub_taxa)
 write_csv(full_hub_taxa_df,"./Output/Full_HubTaxa_List.csv")
+
+full_hub_taxa_df %>% 
+  # dplyr::select(-ASV) %>% 
+  mutate(Taxonomy = Taxonomy %>% str_remove_all("Mutualist_|Pathogen_|p__|c__|o__|f__|g__|s__")) %>% 
+  write_csv("./Output/Full_HubTaxa_List.csv")
+
 
 hub_ps_amf %>% 
   psmelt() %>% 

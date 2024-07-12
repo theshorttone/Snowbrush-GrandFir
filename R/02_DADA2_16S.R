@@ -199,7 +199,7 @@ saveRDS(seqtab.nochim,"./Output/16S_seqtab.nochim.clean.RDS")
 # ASSIGN TAXONOMY ####
 
 # Use RDP training set for 16S
-taxa <- assignTaxonomy(seqtab.nochim, "./Taxonomy/rdp_train_set_18.fa.gz", multithread=nthreads,tryRC = TRUE,verbose = TRUE)
+taxa <- assignTaxonomy(seqtab.nochim, "./Taxonomy/rsilva_nr99_v138.1_train_set.fa.gz", multithread=nthreads,tryRC = TRUE,verbose = TRUE)
 
 # Save intermediate taxonomy file
 saveRDS(taxa, file = "./Output/16S_RDP_Taxonomy_from_dada2.RDS")

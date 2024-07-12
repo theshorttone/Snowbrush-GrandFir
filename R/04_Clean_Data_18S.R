@@ -39,14 +39,13 @@ ps <- readRDS("./Output/18S_ps_not-cleaned.RDS") # change to non-phylogeny stuff
 
 # clean up wilting_scale
 ps@sam_data$wilting_scale <- (1 / ps@sam_data$wilting_scale)
-
+ps@tax_table[,1] %>% unique
 
 # Taxonomic ranks from PR2/Maarjam
-colnames(tax_table(ps)) <- c("Domain","Supergroup","Division","Kingdom","Phylum","Subdivision","Order","Genus","Species")
+# colnames(tax_table(ps)) <- c("Domain","Supergroup","Division","Kingdom","Phylum","Subdivision","Order","Genus","Species")
 
-# Remove Non-Fungi?
-ps <- ps %>% subset_taxa(Kingdom == "Fungi")
-ps@tax_table[,5] %>% unique
+# Remove Non-Fungi and non Glomeromycotina
+ps <- ps %>% subset_taxa(Kingdom == "k__Fungi")
 
 ##### STOPPED HERE Feb 9, 4:20pm - Need to go back and export positive controls #####
 
@@ -54,7 +53,7 @@ ps@tax_table[,5] %>% unique
 pos_ctls <- c("AMF-P-3","AMF-P-4","AMF-P-5","AMF-Pos1","AMF-Pos2","AMF-Pos3","AMF-Pos4","AMF-Pos5")
 pos <- ps %>% 
   subset_samples(sample_names(ps) %in% pos_ctls)
-y <- tax_table(pos)[which(taxa_sums(pos) > 0),5:9] %>% as.data.frame()
+y <- tax_table(pos)[which(taxa_sums(pos) > 0),] %>% as.data.frame()
 
 
 x <- as.data.frame(otu_table(pos))[,which(taxa_sums(pos) > 0)]
@@ -78,6 +77,44 @@ pos %>%
   labs(y="Relative abundance")
 ggsave("./Output/figs/18S_Positive_Control_stacked-barchart.png", height = 6, width = 8,dpi=300)
 
+amf_melt <- pos %>% 
+  transform_sample_counts(function(x){x/sum(x)}) %>% 
+  psmelt() %>% 
+  mutate(Genus = Genus %>% str_remove("g__"),
+         Genus = Genus %>% str_replace("NANA","NA"),
+         Genus = Genus %>% str_replace("NA"," sp."),
+         Species = Species %>% str_replace("__unclassified"," sp."),
+         Species = Species %>% str_replace("__"," "),
+         Species = Species %>% str_replace("NANA","")
+         ) %>% 
+  mutate(gs = paste0(Genus,Species),
+         gs = gs %>% str_replace("NA"," sp"),
+         gs = gs %>% str_replace(" sp sp",""),
+         gs = gs %>% str_replace(" spNA"," sp."),
+         presence = case_when(Abundance > 0 ~ TRUE,
+                              TRUE ~ FALSE))
+amf_melt %>% 
+  ggplot(aes(x=Sample,y=Abundance,fill=gs)) +
+  geom_col() +
+  theme(legend.text = element_text(face='bold.italic')) +
+  labs(fill="Assigned name") +
+  scale_fill_viridis_d(option = "turbo")
+amf_melt %>% 
+  group_by(Sample) %>% 
+  reframe(list = unique(gs))
+
+
+table(amf_melt$Sample,amf_melt$presence)
+
+
+amf_melt %>% 
+  filter(presence) %>% 
+  ggplot(aes(x=Sample,y=gs,fill=Abundance,group=Sample)) +
+  geom_tile() +
+  scale_fill_viridis_c() +
+  theme(axis.text.x = element_text(angle=90,hjust=0,vjust=0.5,face='bold'),
+        axis.text.y = element_text(face='bold.italic'))
+amf_melt$presence
 
 # Remove postive control
 ps <- ps %>% subset_samples(sample_names(ps) %ni% pos_ctls)

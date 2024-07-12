@@ -35,6 +35,7 @@ set.seed(666)
 ps <- readRDS("./Output/16S_ps_not-cleaned_w_tree.RDS") # change to non-phylogeny stuff
 sample_names(ps)
 
+
 # clean up wilting_scale
 ps@sam_data$wilting_scale <- (1 / ps@sam_data$wilting_scale)
 
