@@ -234,11 +234,20 @@ run_MRM_inoc_final <-
     initial_inoc_dist <- inoc@otu_table %>% as('matrix') %>% t() %>% vegan::vegdist(na.rm = TRUE)
     
     # save ecodist tables
-    MRM_results <- 
-      ecodist::MRM(final_inoc_dist ~ initial_inoc_dist) %>% 
-      as.data.frame() 
+    MRM_list <- 
+      ecodist::MRM(final_inoc_dist ~ initial_inoc_dist) 
     
-    return(MRM_results)
+    r_val <- as.numeric(MRM_list$r.squared[1])
+    f_val <- as.numeric(MRM_list$F.test[1])
+    output_df <- as.data.frame(MRM_list$coef)
+    
+    mrm_results <- output_df[rownames(output_df) != "Int", ] %>% 
+      mutate(
+        r_squared = r_val,
+        f_value = f_val
+      )
+    
+    return(mrm_results)
 }
 
 plot_sterile_heatmap <- function(comparison){
@@ -563,19 +572,9 @@ ps <- successful_4; mrm_4 <- run_MRM_inoc_final(ps)
 ps <- successful_6; mrm_6 <- run_MRM_inoc_final(ps)
 
 # Pull MRM results tables into single table
-MRM_df <- 
-  cbind(inoculum=c("Inoc_1","Inoc_4","Inoc_6"),
-        rbind(
-          unlist(mrm_1 %>% filter(row.names(.) != "Int")),
-          unlist(mrm_4 %>% filter(row.names(.) != "Int")),
-          unlist(mrm_6 %>% filter(row.names(.) != "Int"))) 
-  ) %>% 
-  as.data.frame() %>% 
-  mutate(coef.final_inoc_dist=as.numeric(coef.final_inoc_dist),
-         coef.pval=as.numeric(coef.pval),
-         r.squared=as.numeric(r.squared),
-         F.test=as.numeric(F.test)) %>% 
-  mutate(across(where(is.numeric),function(x){round(x,3)}))
+MRM_df_list <- list(mrm_1,       mrm_4,     mrm_6)
+MRM_df <- bind_rows(MRM_df_list, .id = "site")
+rownames(MRM_df) <- NULL
 saveRDS(MRM_df,"./Output/16S_MRM_stats_table_inoc_vs_final.RDS")
 
 # CHECK SUCCESSFUL AGAINST STERILE ####
@@ -633,3 +632,4 @@ bact_merged %>%
         axis.title = element_text(face='bold',size=12)) +
   labs(x="",y="Relative abundance",title = "Taxonomy of successfully vs \nunsuccessfully transplanted ASVs")
 ggsave("./Output/figs/16S_successful_vs_unsuccessful_taxa_breakdown.png",width = 12,height = 8)
+

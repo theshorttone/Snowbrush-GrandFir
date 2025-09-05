@@ -250,11 +250,22 @@ run_MRM_inoc_final <-
     initial_inoc_dist <- inoc@otu_table %>% as('matrix') %>% t() %>% vegan::vegdist(na.rm = TRUE)
     
     # save ecodist tables
-    MRM_results <- 
-      ecodist::MRM(final_inoc_dist ~ initial_inoc_dist) %>% 
-      as.data.frame() 
+    MRM_list <- 
+      ecodist::MRM(final_inoc_dist ~ initial_inoc_dist)
+
+    r_val <- as.numeric(MRM_list$r.squared[1])
+    f_val <- as.numeric(MRM_list$F.test[1])
     
-    return(MRM_results)
+    output_df <- as.data.frame(MRM_list$coef)
+    
+    mrm_results <- output_df[rownames(output_df) != "Int", ] %>% 
+      mutate(
+        r_squared = r_val,
+        f_value = f_val
+      )
+    
+    
+    return(mrm_results)
   }
 
 plot_sterile_heatmap <- function(comparison){
@@ -614,10 +625,11 @@ p_f / p_b / p_a
 ggsave("./Output/figs/manuscript_versions/Successful_vs_Unsuccessful_Inoculum_Taxa_Final.png",width = 12,height = 10)
 ggsave("./Output/figs/manuscript_versions/Successful_vs_Unsuccessful_Inoculum_Taxa_Final.tiff",width = 12,height = 10,dpi=500)
 
+#this isn't final figure 
 fung_merged %>% 
   psmelt() %>% 
   mutate(success=ifelse(success == "FALSE","Unsuccessful","Successful")) %>% 
-  dplyr::filter(Subdivision == "Glomeromycotina") %>% 
+  #dplyr::filter(Subdivision == "Glomeromycotina") %>% 
   mutate(Genus = case_when(is.na(Genus) ~ "Uncertain",
                            TRUE ~ Genus)) %>% 
   ggplot(aes(x=site,y=Abundance,fill=Genus)) +
@@ -663,28 +675,16 @@ data.frame(
 
 ps <- successful_1; mrm_1 <- run_MRM_inoc_final(ps)
 ps <- successful_2; mrm_2 <- run_MRM_inoc_final(ps)
-# ps <- successful_3; mrm_3 <- run_MRM_inoc_final(ps)
+#ps <- successful_3; mrm_3 <- run_MRM_inoc_final(ps)
 ps <- successful_4; mrm_4 <- run_MRM_inoc_final(ps)
-# ps <- successful_5; mrm_5 <- run_MRM_inoc_final(ps)
-# ps <- successful_6; mrm_6 <- run_MRM_inoc_final(ps)
+#ps <- successful_5; mrm_5 <- run_MRM_inoc_final(ps)
+#ps <- successful_6; mrm_6 <- run_MRM_inoc_final(ps)
 
 # Pull MRM results tables into single table
-MRM_df <- 
-  cbind(inoculum=c("Inoc_1","Inoc_2","Inoc_4"),
-        rbind(
-          unlist(mrm_1 %>% filter(row.names(.) != "Int")),
-          unlist(mrm_2 %>% filter(row.names(.) != "Int")),
-          # unlist(mrm_3 %>% filter(row.names(.) != "Int")),
-          unlist(mrm_4 %>% filter(row.names(.) != "Int"))
-          # unlist(mrm_5 %>% filter(row.names(.) != "Int")),
-          # unlist(mrm_6 %>% filter(row.names(.) != "Int"))) 
-  )) %>% 
-  as.data.frame() %>% 
-  mutate(coef.final_inoc_dist=as.numeric(coef.final_inoc_dist),
-         coef.pval=as.numeric(coef.pval),
-         r.squared=as.numeric(r.squared),
-         F.test=as.numeric(F.test)) %>% 
-  mutate(across(where(is.numeric),function(x){round(x,3)}))
+MRM_df_list <- list(mrm_1, mrm_2,   mrm_4)
+MRM_df <- bind_rows(MRM_df_list, .id = "site")
+rownames(MRM_df) <- NULL
+
 saveRDS(MRM_df,"./Output/18S_MRM_stats_table_inoc_vs_final.RDS")
 
 

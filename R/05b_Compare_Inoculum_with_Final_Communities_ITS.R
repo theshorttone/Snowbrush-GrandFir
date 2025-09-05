@@ -15,7 +15,7 @@
 #                     patchwork v 1.1.3
 # -----------------------------------------------------------------------------#
 
-# SETUP ####
+# SETUP c####
 library(tidyverse); packageVersion("tidyverse")
 library(phyloseq); packageVersion("phyloseq")
 library(ShortRead); packageVersion("ShortRead")
@@ -233,12 +233,27 @@ run_MRM_inoc_final <-
     initial_inoc_dist <- inoc@otu_table %>% as('matrix') %>% t() %>% vegan::vegdist(na.rm = TRUE)
     
     # save ecodist tables
-    MRM_results <- 
-      ecodist::MRM(final_inoc_dist ~ initial_inoc_dist) %>% 
-      as.data.frame() 
+    MRM_list <- 
+      ecodist::MRM(final_inoc_dist ~ initial_inoc_dist) 
+    #%>% 
+      #as.data.frame() 
     
-    return(MRM_results)
+    r_val <- as.numeric(MRM_list$r.squared[1])
+    f_val <- as.numeric(MRM_list$F.test[1])
+    
+    output_df <- as.data.frame(MRM_list$coef)
+    
+    mrm_results <- output_df[rownames(output_df) != "Int", ] %>% 
+      mutate(
+        r_squared = r_val,
+        f_value = f_val
+      )
+    
+    
+    return(mrm_results)
   }
+
+
 
 plot_sterile_heatmap <- function(comparison){
   sterile %>% 
@@ -557,23 +572,11 @@ ps <- successful_4; mrm_4 <- run_MRM_inoc_final(ps)
 ps <- successful_5; mrm_5 <- run_MRM_inoc_final(ps)
 ps <- successful_6; mrm_6 <- run_MRM_inoc_final(ps)
 
+
 # Pull MRM results tables into single table
-MRM_df <- 
-  cbind(inoculum=c("Inoc_1","Inoc_2","Inoc_3","Inoc_4","Inoc_5","Inoc_6"),
-        rbind(
-          unlist(mrm_1 %>% filter(row.names(.) != "Int")),
-          unlist(mrm_2 %>% filter(row.names(.) != "Int")),
-          unlist(mrm_3 %>% filter(row.names(.) != "Int")),
-          unlist(mrm_4 %>% filter(row.names(.) != "Int")),
-          unlist(mrm_5 %>% filter(row.names(.) != "Int")),
-          unlist(mrm_6 %>% filter(row.names(.) != "Int"))) 
-  ) %>% 
-  as.data.frame() %>% 
-  mutate(coef.final_inoc_dist=as.numeric(coef.final_inoc_dist),
-         coef.pval=as.numeric(coef.pval),
-         r.squared=as.numeric(r.squared),
-         F.test=as.numeric(F.test)) %>% 
-  mutate(across(where(is.numeric),function(x){round(x,3)}))
+MRM_df_list <- list(mrm_1, mrm_2, mrm_3, mrm_4, mrm_5, mrm_6)
+MRM_df <- bind_rows(MRM_df_list, .id = "site")
+rownames(MRM_df) <- NULL
 saveRDS(MRM_df,"./Output/ITS_MRM_stats_table_inoc_vs_final.RDS")
 
 # CHECK SUCCESSFUL AGAINST STERILE ####
@@ -648,3 +651,4 @@ x %>%
 x %>% 
   group_by(amplicon) %>% 
   summarize(proportion_in_sterile = sum(found_in_sterile) / n())
+
