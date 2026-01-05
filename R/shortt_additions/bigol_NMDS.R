@@ -23,6 +23,28 @@ burn_colors <- c(
 
 # plotting functions ------------------------------------------------------
 
+#via Geooff:
+condense_ps_to_species <- function(x){
+  # remove bad taxa assignments
+  x <- x %>% subset_taxa(!is.na(Phylum))
+  # build data frame
+  sp <- x@tax_table[,7] %>% as.character()
+  gn <- x@tax_table[,6] %>% as.character()
+  or <- x@tax_table[,4] %>% as.character()
+  sb <- x@tax_table[,3] %>% as.character()
+  ph <- x@tax_table[,2] %>% as.character()
+  
+  condensed_taxonomy <- 
+    data.frame(ph,sb,or,gn,sp) %>% 
+    mutate(spp = case_when(is.na(or) & is.na(gn) & is.na(sp) ~ paste0(sb," sp."),
+                           !is.na(or) & is.na(gn) & is.na(sp) ~ paste0(or," sp."),
+                           !is.na(or) & !is.na(gn) & is.na(sp) ~ paste0(gn," sp."),
+                           !is.na(or) & !is.na(gn) & !is.na(sp) ~ sp))
+  
+  x@tax_table[,7] <- str_replace_all(condensed_taxonomy$spp,"_"," ")
+  x <- tax_glom(x,"Species")
+  return(x)
+}
 
 make_ord_plot <- function(ps,
                           method = "NMDS",
@@ -42,8 +64,7 @@ make_ord_plot <- function(ps,
   ps_rel <- phyloseq::transform_sample_counts(ps, function(x) x / sum(x))
   
   ord <- if (toupper(method) == "NMDS") {
-    phyloseq::ordinate(ps_rel, method = "NMDS", distance = distance, trymax = trymax)
-  } else {
+    phyloseq::ordinate(ps_rel, method = "NMDS", distance = distance, trymax = trymax)} else {
     phyloseq::ordinate(ps_rel, method = method, distance = distance)
   }
 
@@ -82,6 +103,7 @@ make_ord_plot <- function(ps,
       linetype = "none"
     )+
     theme_few()
+  
   
   return(list(ord = ord, plot = p))
 }
@@ -162,7 +184,7 @@ make_ord_plot(
   trymax = 20
 )$plot +
   labs(
-    title = "NMDS of 16S gene sequences",
+    title = "NMDS of 16S gene sequences Stress = 0.15",
     subtitle = " "
 )
 ggsave("R/shortt_additions/figures/bigol_16S_NMDS_inoculum.png",
@@ -195,8 +217,60 @@ make_ord_plot(
   trymax = 20
 )$plot +
   labs(
-    title = "NMDS of ITS gene sequences",
+    title = "NMDS of ITS gene sequences but STRESS = 0.27 (bad)",
     subtitle = " "
   )
-ggsave("R/shortt_additions/figures/bigol_ITS_NMDS_inoculum.png",
+ggsave("R/shortt_additions/figures/bigol_ITS_DCA_inoculum.png",
        width = 6, height = 5)
+
+
+# AM (18S)---------------------------------------------------------------------
+
+site1.inoc.full <- readRDS("Output/phyloseq_objects/18S_site1.inoc.full.RDS") %>% condense_ps_to_species()
+site2.inoc.full <- readRDS("Output/phyloseq_objects/18S_site2.inoc.full.RDS") %>% condense_ps_to_species()
+site3.inoc.full <- readRDS("Output/phyloseq_objects/18S_site3.inoc.full.RDS") %>% condense_ps_to_species()
+site4.inoc.full <- readRDS("Output/phyloseq_objects/18S_site4.inoc.full.RDS") %>% condense_ps_to_species()
+site5.inoc.full <- readRDS("Output/phyloseq_objects/18S_site5.inoc.full.RDS") %>% condense_ps_to_species()
+site6.inoc.full <- readRDS("Output/phyloseq_objects/18S_site6.inoc.full.RDS") %>% condense_ps_to_species()
+
+inoc.full.am <- merge_phyloseq(site1.inoc.full,site2.inoc.full,site3.inoc.full,
+                                 site4.inoc.full,site5.inoc.full,site6.inoc.full)
+  inoc.full.am <- prune_samples(sample_sums(inoc.full.am) > 0, inoc.full.am)
+
+df_samples <- sample_data(inoc.full.am) 
+df_samples <- data.frame(df_samples)   
+
+df_samples <- clean_func(df_samples)
+sample_data(inoc.full.am) <- sample_data(df_samples)
+
+
+am_res <- make_ord_plot(
+  ps = ps_am_clean,
+  method = "NMDS",
+  distance = "bray",
+  site_colors = site_colors,
+  burn_colors = burn_colors,
+  trymax = 20
+)
+
+
+
+names(am_res)      # should show e.g. "plot" and "ord" (depending on your function)
+p_am   <- am_res$plot + labs(title = "AM of 18S gene sequences", subtitle = " ")
+ord_am <- am_res$ord
+ggsave("R/shortt_additions/figures/bigol_AM_NMDS_inoculum.png",
+       width = 6, height = 5)
+p_am
+
+
+pts <- as.data.frame(ord_am$points)
+colnames(pts)[1:2] <- c("NMDS1","NMDS2")
+
+# Rank by distance from origin (big = likely problematic)
+outliers_nmds <- pts %>%
+  mutate(sample = rownames(.),
+         r = sqrt(NMDS1^2 + NMDS2^2)) %>%
+  arrange(desc(r))
+
+outliers_nmds %>% head(15)
+
