@@ -131,7 +131,7 @@ cols_genus <- paste0(cols, ".genus")
 
 traits_one <- traits_by_species %>%
   left_join(
-    traits_just_genus %>% select(Genus_key, all_of(cols)),
+    traits_just_genus %>% select(Genus_key, n_trait_rows, all_of(cols)),
     by = c("genus" = "Genus_key"),
     suffix = c("", ".genus")
   ) %>%
@@ -153,54 +153,111 @@ traits_one[cols] <- Map(
   traits_one[cols_genus]
 )
 
-traits_one <- traits_one %>%
+traits_df <- traits_one %>%
   select(-ends_with(".genus")) %>% 
-  select(species, genus, all_of(traits_to_coalesce))
+  select(species, genus, guild_source, n_trait_rows, all_of(traits_to_coalesce))
+  
+
+# adding fungal traits to taxa table --------------------------------------
+
+
+# 1) Build a per-ASV lookup table from tax_table (rows = taxa_names)
+tax_lookup <- tax_table(fung_ra) %>%
+  as("matrix") %>%
+  as.data.frame(stringsAsFactors = FALSE) %>%
+  tibble::rownames_to_column("taxon_id") %>%
+  mutate(
+    genus_raw   = str_remove(Genus, "^g__") %>% str_trim(),
+    species_raw = str_remove(Species, "^s__") %>% str_trim(),
+    species_key = paste(genus_raw, coalesce(species_raw, "NA"), sep = "_") %>%
+      str_to_lower()
+  )
+
+# 2) Join traits onto each ASV via species_key (rename to match your column name in traits_one)
+#    This assumes traits_one has a column named "species" that is the species_key.
+tax_with_traits <- tax_lookup %>%
+  left_join(traits_df, by = c("species_key" = "species"))
+
+# 3) Write into taxa_data (use taxon_id as rownames)
+taxa_df <- tax_with_traits %>%
+  select(taxon_id, everything(), -species_key) %>%  # keep species_key if you want
+  tibble::column_to_rownames("taxon_id")
+
+taxa_data(fung_ra) <- taxa_data(taxa_df)
 
 
 
+####UNTESTED BELOW# join traits with tax_table species 
+
+# phyloseq with traits ----------------------------------------------------
+
+tt <- as(tax_table(fung_ra), "matrix") %>%
+  as.data.frame(stringsAsFactors = FALSE)
+
+taxon_id <- rownames(tt)
+
+tax_key <- tibble(
+  taxon_id = taxon_id,
+  genus_raw   = str_remove(tt$Genus, "^g__") %>% str_trim(),
+  species_raw = str_remove(tt$Species, "^s__") %>% str_trim()
+) %>%
+  mutate(
+    species_clean = case_when(
+      is.na(species_raw) | species_raw == "" ~ NA_character_,
+      TRUE ~ species_raw
+    ),
+    species_key = paste(genus_raw, coalesce(species_clean, "na"), sep = "_") %>% str_to_lower()
+  )
+
+trait_cols <- c("guild_fg", "guild_source", "trophic_mode_fg",
+                "notes_fg", "source_funguild_fg", "culture_media")
+
+tax_traits <- tax_key %>%
+  left_join(traits_df %>% select(species, any_of(trait_cols)),
+            by = c("species_key" = "species"))
+
+# 3) append traits into tax_table (as extra columns)
+tt2 <- tt
+for (nm in trait_cols) tt2[[nm]] <- tax_traits[[nm]]
+rownames(tt2) <- tax_traits$taxon_id
+
+fung_ra_traits <- fung_ra   # copy the phyloseq object
+
+# ...build tt2 as you already did...
+
+tax_table(fung_ra_traits) <- tax_table(as.matrix(tt2))
 
 
-
-# join traits with tax_table species 
-
-traits <- 
-  data.frame(Genus=genera) %>% 
-  mutate(species=paste(Genus,species,sep="_")) %>% 
-  left_join(summarized_traits,by=c("species"))
-
+a <- as.data.frame(tax_table(fung_ra_traits))
 
 
 # make relative abundance version of phyloseq object
 fung_ra <- transform_sample_counts(fung,function(x){x/sum(x)})
 
-
-
-# identify "mutualist" taxa
-unname(fung_ra@tax_table[,1]) %>% unique
+unique(as.character(tax_table(fung_ra_traits)[, "guild_fg"]))
 
 # just using "mycorrhizal" as the keyword...
 mutualist_guilds <- 
-  grep("[M,m]ycorrhizal",(fung_ra@tax_table[,1]),value = TRUE) %>% 
+  grep("Ectomycorrhizal",(fung_ra_traits@tax_table[,8]),value = TRUE) %>% 
   unique()
 
 # identify "saprotrophs"
 saprotroph_guilds <- 
-  grep("[S,s]aprotroph",(fung_ra@tax_table[,1]),value = TRUE) %>% 
-  grep(pattern="[M,m]ycorrhizal",x=.,value = TRUE, invert = TRUE) %>% 
+  grep("[S,s]aprotroph",(fung_ra_traits@tax_table[,8]),value = TRUE) %>% 
+  grep(pattern="Ectomycorrhizal",x=.,value = TRUE, invert = TRUE) %>% 
   unique()
 
 # identify "pathogens"
 pathogen_guilds <- 
-  grep("[P,p]athogen|[P,p]arasite",(fung_ra@tax_table[,1]),value = TRUE) %>% 
-  grep(pattern="[M,m]ycorrhizal",x=.,value = TRUE, invert = TRUE) %>% 
+  grep("Plant [P,p]athogen|Fungal Parasite",(fung_ra@tax_table[,1]),value = TRUE) %>% 
+  grep(pattern="Ectomycorrhizal",x=.,value = TRUE, invert = TRUE) %>% 
   unique()
 
-
-# subset taxa to only mutualists; get row sums; this will be proportion of mutualists
-# in each sample
+  
 
 mutualist_proportions <- 
   fung_ra %>% 
   subset_taxa(Guild %in% mutualist_guilds) %>% 
   sample_sums()
+
+
