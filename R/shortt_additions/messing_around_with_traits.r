@@ -1,3 +1,10 @@
+##do proportion f mutualists for inoculumn like a bar graph and also 
+##do the same for the final growth stuff 
+## can also add the diversity barchart thing for the inoculum by mutualists 
+##save number/ percent for how many ASVs are a part of this guild stuff 
+
+
+# load packages -----------------------------------------------------------
 
 library(tidyverse); packageVersion("tidyverse")
 library(phyloseq); packageVersion("phyloseq")
@@ -6,6 +13,7 @@ library(fungaltraits); packageVersion("fungaltraits")
 library(broom); packageVersion("broom")
 library(lmerTest); packageVersion("lmerTest")
 library(broom.mixed); packageVersion("broom.mixed")
+library(patchwork)
 
 
 
@@ -15,7 +23,18 @@ drought_colors <- pal.discrete[c(2,5)]
 host_colors <- pal.discrete[c(7,10)] 
 fire_colors <- pal.discrete[c(18,2,14)]
 
-# functions
+# functions### -------------------------------------------------------------
+save_plot <- function(plot, name, w = 6, h = 5) {
+  ggsave(
+    filename = paste0("R/shortt_additions/figures/", name, ".pdf"),
+    plot = plot,
+    width = w,
+    height = h,
+    units = "in",
+    dpi = 300
+  )
+}
+
 clean_model_df <- function(x){
   broom.mixed::tidy(x) %>% 
     mutate(term=term %>% str_remove("indicator")) %>% 
@@ -34,134 +53,6 @@ traits_to_ignore <- c(
   "sterol_type","studyName","higher_clade","elevation","em_expl","colour_mean","ascoma_development","ascoma_type","ascus_dehiscence",
   "uuid","obj_id", "Genus"
 )
-
-# functions ---------------------------------------------------------------
-
-# load data
-fung <- readRDS("./Output/phyloseq_objects/ITS_clean_phyloseq_object.RDS")
-fung@sam_data %>% row.names()
-
-fung_ra <- transform_sample_counts(fung,function(x){x/sum(x)})
-tax_df <- as.data.frame(tax_table(fung_ra))
-
-
-
-traits_meta <- read_csv("https://github.com/traitecoevo/fungaltraits/releases/download/v0.0.3/funtothefun.csv")
-
-# download FungalTraits database
-traits_db <- fungaltraits::fungal_traits()
-unique(traits_db$species)
-# match taxa at genus level
-genera <- fung@tax_table[,6] %>% str_remove("^g__")
-species <- fung@tax_table[,7] %>% str_remove("^s__")
-
-traits_db_norm <- traits_db %>%
-  mutate(
-    species = species %>%
-      str_trim() %>%
-      str_to_lower() %>%
-      str_replace_all("\\s+", "_"),
-    Genus = Genus %>%
-      str_to_lower()
-      )
-
-#species level assignment db
-fungal_traits_sp <- 
-  data.frame(genus = genera) %>% 
-  mutate(
-    species = paste(genus, species, sep = "_") %>%
-      str_to_lower(),
-    genus = str_to_lower(genus)
-    ) %>% 
-    filter(species != "na_na") %>% 
-  distinct(species, .keep_all = TRUE) %>% 
-  left_join(traits_db_norm, by = "species", multiple = "all") %>%
-  select(-all_of(traits_to_ignore))
-         
-
-#genus level assignment for those not matched at species 
-
-fungal_traits_genus <- 
-  data.frame(genus = genera) %>% 
-  mutate(
-    Genus_key = str_trim(genus) %>% str_to_lower()
-  ) %>% 
-  filter(!str_detect(Genus_key, "gen_incertae_sedis")) %>% 
-  distinct(Genus_key, .keep_all = TRUE) %>% 
-  left_join(traits_db_norm, by = c("Genus_key" = "Genus"), multiple = "all") %>% 
-  select(-any_of(traits_to_ignore))
-
-#function
-collapse_chars <- function(x) {
-  x <- unique(na.omit(x))
-  if (length(x) == 0) NA_character_ else paste(sort(x), collapse = "|")
-}
-
-traits_by_species <- fungal_traits_sp %>%
-  group_by(species, genus) %>%
-  summarise(
-    n_trait_rows = n(),
-    # numeric traits: mean
-    across(where(is.numeric), ~mean(.x, na.rm = TRUE)),
-    # character traits: list/union
-    across(where(is.character), collapse_chars),
-    .groups = "drop"
-  )
-
-traits_just_genus <- fungal_traits_genus %>%
-  group_by(Genus_key) %>%
-  summarise(
-    n_trait_rows = n(),
-    across(where(is.numeric), ~mean(.x, na.rm = TRUE)),
-    across(where(is.character), collapse_chars),
-    .groups = "drop"
-  ) %>% filter(!is.na(speciesMatched))
-
-
-traits_to_coalesce <- c(
-  "guild_fg",
-  "trophic_mode_fg",
-  "culture_media",
-  "notes_fg",
-  "source_funguild_fg",
-  "speciesMatched", 
-  "confidence_fg"
-)
-
-cols <- traits_to_coalesce
-cols_genus <- paste0(cols, ".genus")
-
-traits_one <- traits_by_species %>%
-  left_join(
-    traits_just_genus %>% select(Genus_key, n_trait_rows, all_of(cols)),
-    by = c("genus" = "Genus_key"),
-    suffix = c("", ".genus")
-  ) %>%
-  mutate(
-    guild_source = case_when(
-      !is.na(guild_fg) ~ "species",
-      is.na(guild_fg) & !is.na(guild_fg.genus) ~ "genus",
-      TRUE ~ "none"
-    )
-  ) %>%
-  mutate(
-    across(all_of(cols), ~ na_if(.x, "")) # optional
-  )
-
-# do the coalesce using base R, then put back into the data frame
-traits_one[cols] <- Map(
-  coalesce,
-  traits_one[cols],
-  traits_one[cols_genus]
-)
-
-traits_df <- traits_one %>%
-  select(-ends_with(".genus")) %>% 
-  select(species, genus, guild_source, n_trait_rows, all_of(traits_to_coalesce))
-  
-
-# adding fungal traits to tax table --------------------------------------
-
 
 #Build a per-ASV lookup table from tax_table (rows = taxa_names)
 tax_lookup <- tax_table(fung_ra) %>%
@@ -375,7 +266,6 @@ p1 <- plot_guild_effects(guild_plot_df, species_sel="GrandFir", guild="mutualist
 p2 <- plot_guild_effects(guild_plot_df, species_sel="GrandFir", guild="pathogen", color_by="drought", log_x=TRUE)
 p3 <- plot_guild_effects(guild_plot_df, species_sel="Snowbrush", guild="mutualist", color_by="drought", log_x=TRUE)
 p4 <- plot_guild_effects(guild_plot_df, species_sel="Snowbrush", guild="pathogen", color_by="drought", log_x=TRUE)
-
 p5 <- plot_guild_effects(guild_plot_df, species_sel="GrandFir", guild="mutualist", color_by="fire", log_x=TRUE)
 p6 <- plot_guild_effects(guild_plot_df, species_sel="GrandFir", guild="pathogen", color_by="fire", log_x=TRUE)
 p7 <- plot_guild_effects(guild_plot_df, species_sel="Snowbrush", guild="mutualist", color_by="fire", log_x=TRUE)
@@ -384,28 +274,17 @@ p9 <- plot_guild_effects(guild_plot_df, species_sel="Snowbrush", guild="saprotro
 p10 <- plot_guild_effects(guild_plot_df, species_sel="GrandFir", guild="saprotroph", color_by="fire", log_x=TRUE)
 
 
-saveRDS(p1,"R/shortt_additions/figures/test/log_scale_GF_mutualist_drought.RDS")
-saveRDS(p2,"R/shortt_additions/figures/test/log_scale_GF_pathogen_drought.RDS")
-saveRDS(p3,"R/shortt_additions/figures/test/log_scale_SB_mutualist_drought.RDS")
-saveRDS(p4,"R/shortt_additions/figures/test/log_scale_SB_pathogen_drought.RDS")
+p1;save_plot(p1, "ITS_guild_all_growth/log_scale_GF_mutualist_drought")
+p2;save_plot(p2, "ITS_guild_all_growth/log_scale_GF_pathogen_drought")
+p3;save_plot(p3, "ITS_guild_all_growth/log_scale_SB_mutualist_drought")
+p4;save_plot(p4, "ITS_guild_all_growth/log_scale_SB_pathogen_drought")
+p5;save_plot(p5, "ITS_guild_all_growth/log_scale_GF_mutualist_fire")
+p6;save_plot(p6, "ITS_guild_all_growth/log_scale_GF_pathogen_fire")
+p7;save_plot(p7, "ITS_guild_all_growth/log_scale_SB_mutualist_fire")
+p8;save_plot(p8, "ITS_guild_all_growth/log_scale_SB_pathogen_fire")
+p9;save_plot(p9, "ITS_guild_all_growth/log_scale_SB_saprotroph_fire")
+p10;save_plot(p10, "ITS_guild_all_growth/log_scale_GF_saprotroph_fire")
 
-
-saveRDS(p5,"R/shortt_additions/figures/test/log_scale_GF_mutualist.RDS")
-saveRDS(p6,"R/shortt_additions/figures/test/log_scale_GF_pathogen.RDS")
-saveRDS(p7,"R/shortt_additions/figures/test/log_scale_SB_mutualist.RDS")
-saveRDS(p8,"R/shortt_additions/figures/test/log_scale_SB_pathogen.RDS")
-saveRDS(p9,"R/shortt_additions/figures/test/log_scale_SB_saprotoph.RDS")
-saveRDS(p10,"R/shortt_additions/figures/test/log_scale_GF_saprotroph.RDS")
-p1
-p2
-p3
-p4
-p5
-p6
-p7
-p8
-p9
-p10
 
 
 # Modeling ####
@@ -510,8 +389,8 @@ results_all <- dplyr::bind_rows(results_drought, results_fire) %>%
 saveRDS(results_all, "R/shortt_additions/stats/p_hacked_ITS_results_all_individual_growth(including log).RDS")
 
 
-## scaled all growth model ------------------------------------------------------------
 
+# scaled fig --------------------------------------------------------------
 growth_traits <- c("leaf_number","shoot_dm","final_root_dm", "height")
 
 guild_df_comp <- guild_df %>%
@@ -528,6 +407,128 @@ guild_df_comp <- guild_df %>%
   dplyr::mutate(
     growth_index = rowMeans(dplyr::across(all_of(growth_traits)), na.rm = TRUE)
   )
+
+
+
+plot_guild_growth_index_log <- function(df,
+                                        species_sel = c("GrandFir","Snowbrush"),
+                                        guild = c("mutualist","pathogen","saprotroph"),
+                                        color_by = c("none","drought","fire_freq")) {
+  
+  species_sel <- match.arg(species_sel)
+  guild       <- match.arg(guild)
+  color_by    <- match.arg(color_by)
+  
+  df2 <- df %>%
+    dplyr::filter(.data$species == species_sel) %>%
+    dplyr::mutate(
+      x_log = dplyr::case_when(
+        guild == "mutualist"  ~ .data$prop_mut_log10,
+        guild == "pathogen"   ~ .data$prop_path_log10,
+        guild == "saprotroph" ~ .data$prop_sap_log10
+      ),
+      Moisture = dplyr::case_when(
+        drought == "D"  ~ "Low",
+        drought == "ND" ~ "High",
+        TRUE ~ as.character(drought)
+      ),
+      fire_freq = factor(fire_freq, levels = c("0","1","3"))
+    )
+  
+  base <- ggplot2::ggplot(df2, ggplot2::aes(x = x_log, y = growth_index)) +
+    ggplot2::geom_point(alpha = .5, size = 3) +
+    ggplot2::geom_smooth(method = "lm", se = FALSE) +
+    ggplot2::scale_x_continuous(
+      breaks = log10(c(1e-6, 1e-4, 1e-2, 1e-1, 1)),
+      labels = c("0", "0.0001", "0.01", "0.1", "1")
+    ) +
+    ggplot2::theme_bw() +
+    ggplot2::theme(
+      axis.title = ggplot2::element_text(face = "bold", size = 16),
+      plot.title = ggplot2::element_text(face = "bold", size = 12, hjust = .5),
+      legend.title = ggplot2::element_text(face = "bold", size = 14),
+      legend.text  = ggplot2::element_text(face = "bold", size = 12)
+    ) +
+    ggplot2::labs(
+      x = paste0("Proportion of ", guild, " fungi (log scale)"),
+      y = "Combined scaled growth index",
+      title = ifelse(species_sel == "GrandFir", "Grand fir", "Snowbrush")
+    )
+  
+  if (color_by == "none") {
+    return(base)
+  }
+  
+  if (color_by == "drought") {
+    return(
+      base +
+        ggplot2::aes(color = Moisture) +
+        ggplot2::scale_color_manual(values = drought_colors) +
+        ggplot2::labs(color = "Moisture")
+    )
+  }
+  
+  # color_by == "fire_freq"
+  base +
+    ggplot2::aes(color = fire_freq) +
+    ggplot2::scale_color_manual(values = fire_colors) +
+    ggplot2::labs(color = "Fire frequency")
+}
+
+
+
+
+  
+  # Grand fir, pathogens, color by drought
+  p1 <- plot_guild_growth_index_log(guild_df_comp, "GrandFir", "pathogen", "fire_freq")
+  
+  p1# Snowbrush, mutualists, color by fire
+  p2 <- plot_guild_growth_index_log(guild_df_comp, "GrandFir", "mutualist", "fire_freq")
+
+  # No color
+  p3 <- plot_guild_growth_index_log(guild_df_comp, "GrandFir", "saprotroph", "fire_freq")
+  
+  p4 <- plot_guild_growth_index_log(guild_df_comp, "Snowbrush", "pathogen", "fire_freq")
+  
+  p5 <- plot_guild_growth_index_log(guild_df_comp, "Snowbrush", "mutualist", "fire_freq")
+  
+  p6 <- plot_guild_growth_index_log(guild_df_comp, "Snowbrush", "saprotroph", "fire_freq")
+  
+  combined_plot <- (p1 | p2 | p3) / (p4 | p5 | p6)
+  
+  ggsave(combined_plot,
+         filename = "R/shortt_additions/figures/ITS_guild_all_growth/log_scale_combined_growth_index_fire.pdf",
+         width = 12,
+         height = 8,
+         units = "in",
+         dpi = 300)
+  
+  p1 <- plot_guild_growth_index_log(guild_df_comp, "GrandFir", "pathogen", "drought")
+  
+  p1# Snowbrush, mutualists, color by fire
+  p2 <- plot_guild_growth_index_log(guild_df_comp, "GrandFir", "mutualist", "drought")
+  
+  # No color
+  p3 <- plot_guild_growth_index_log(guild_df_comp, "GrandFir", "saprotroph", "drought")
+  
+  p4 <- plot_guild_growth_index_log(guild_df_comp, "Snowbrush", "pathogen", "drought")
+  
+  p5 <- plot_guild_growth_index_log(guild_df_comp, "Snowbrush", "mutualist", "drought")
+  
+  p6 <- plot_guild_growth_index_log(guild_df_comp, "Snowbrush", "saprotroph", "drought")
+  
+  combined_plot <- (p1 | p2 | p3) / (p4 | p5 | p6)
+  combined_plot
+  ggsave(combined_plot,
+         filename = "R/shortt_additions/figures/ITS_guild_all_growth/log_scale_combined_growth_index_drought.pdf",
+         width = 12,
+         height = 8,
+         units = "in",
+         dpi = 300)
+  
+
+# Scaled all growth model ------------------------------------------------------------
+
 #
 fit_one_lmer_composite <- function(df, species_sel,
                                    predictor = c("mutualist","pathogen","saprotroph"),
@@ -604,230 +605,3 @@ saveRDS(results_all_comp, "R/shortt_additions/stats/p_hacked_ITS_results_combine
 
 
 
-##GEOFF code below 
-# model: plant health ~ mutualism_% * drought + (1|block)
-mutualism_glm_grandfir <- 
-  guild_df %>% 
-  dplyr::filter(species == "GrandFir") %>% 
-  dplyr::select(all_of(c("leaf_number","shoot_dm","final_root_dm","proportion_mutualist","drought","block"))) %>% 
-  mutate(across(c("leaf_number","shoot_dm","final_root_dm"),
-                scale01)) %>% # scale/center all indicators
-  pivot_longer(c("leaf_number","shoot_dm","final_root_dm"),
-               names_to="indicator") %>% 
-  lmer(data=.,
-       formula=value ~ proportion_mutualist * drought + (1|block))
-summary(mutualism_glm_grandfir)
-saveRDS(mutualism_glm_grandfir,"./Output/figs/ITS_Mutualist_Model_GrandFir.RDS")
-
-mutualism_glm_snowbrush <- 
-  guild_df %>% 
-  dplyr::filter(species == "Snowbrush") %>% 
-  dplyr::select(all_of(c("leaf_number","shoot_dm","final_root_dm","proportion_mutualist","drought","block"))) %>% 
-  mutate(across(c("leaf_number","shoot_dm","final_root_dm"),
-                scale01)) %>% # scale/center all indicators
-  pivot_longer(c("leaf_number","shoot_dm","final_root_dm"),
-               names_to="indicator") %>% 
-  lmer(data=.,
-       formula=value ~ proportion_mutualist * drought + (1|block))
-summary(mutualism_glm_snowbrush)
-saveRDS(mutualism_glm_snowbrush,"./Output/ITS_Mutualist_Model_Snowbrush.RDS")
-
-grandfir_pathogen_glm <- 
-  guild_df %>% 
-  dplyr::filter(species == "GrandFir") %>% 
-  dplyr::select(all_of(c("leaf_number","shoot_dm","final_root_dm","proportion_pathogen","drought","block"))) %>% 
-  mutate(across(c("leaf_number","shoot_dm","final_root_dm"),
-                scale01)) %>% # scale/center all indicators
-  pivot_longer(c("leaf_number","shoot_dm","final_root_dm"),
-               names_to="indicator") %>% 
-  lmer(data=.,
-       formula=value ~ proportion_pathogen * drought + (1|block))
-summary(grandfir_pathogen_glm)
-saveRDS(grandfir_pathogen_glm,"./Output/ITS_Pathogen_Model_GrandFir.RDS")
-
-snowbrush_pathogen_glm <- 
-  guild_df %>% 
-  dplyr::filter(species == "Snowbrush") %>% 
-  dplyr::select(all_of(c("leaf_number","shoot_dm","final_root_dm","proportion_pathogen","drought","block"))) %>% 
-  mutate(across(c("leaf_number","shoot_dm","final_root_dm"),
-                scale01)) %>% # scale/center all indicators
-  pivot_longer(c("leaf_number","shoot_dm","final_root_dm"),
-               names_to="indicator") %>% 
-  lmer(data=.,
-       formula=value ~ proportion_pathogen * drought + (1|block))
-summary(snowbrush_pathogen_glm)
-saveRDS(snowbrush_pathogen_glm,"./Output/ITS_Pathogen_Model_Snowbrush.RDS")
-
-# pull together all model outputs from guild predictions on plant traits
-full_guild_model_df <- 
-  clean_model_df(snowbrush_pathogen_glm) %>% mutate(species="Ceanothus") %>% 
-  full_join(clean_model_df(grandfir_pathogen_glm) %>% mutate(species="Abies")) %>% 
-  full_join(
-    clean_model_df(mutualism_glm_snowbrush) %>% mutate(species="Ceanothus") %>% 
-      full_join(clean_model_df(mutualism_glm_grandfir) %>% mutate(species="Abies"))
-  ) %>% 
-  dplyr::filter(effect=="fixed") %>% 
-  select(-group)
-full_guild_model_df
-saveRDS(full_guild_model_df,"R/shortt_additions/figures/ITS_Guild_Model_Output.RDS")
-
-
-# EXPORT PHYSEQ W GUILDS ####
-
-tt <- as.data.frame(tax_table(fung_ra_traits))
-
-# 2. Recode Guild column
-tt$guild_fg<- case_when(
-  tt$guild_fg %in% pathogen_guilds  ~ "Pathogen",
-  tt$guild_fg %in% mutualist_guilds ~ "Mutualist",
-  TRUE                          ~ tt$guild_fg   # keep everything else unchanged
-)
-
-# 3. Write it back into the phyloseq object
-tax_table(fung_ra_traits) <- tax_table(as.matrix(tt))
-
-# 4. Save the modified object (THIS is the one you just edited)
-saveRDS(
-  fung_ra_traits,
-  "./Output/phyloseq_objects/ITS_clean_phyloseq_object_w_guilds.RDS"
-)
-
-saveRDS(fung,"./Output/phyloseq_objects/ITS_clean_phyloseq_object_w_guilds.RDS")
-
-table(tax_table(fung_ra_traits)[,"guild_fg"])
-
-
-
-
-# PLOT ALL GUILD EFFECTS ####
-full_guild_model_df <- full_guild_model_df %>% 
-  mutate(PVAL = case_when(p.value == 0 ~ "P < 0.005",
-                          TRUE ~ paste0("P = ",round(p.value,3) %>% as.character)))
-gf <- guild_df %>% 
-  dplyr::filter(species == "GrandFir") %>% 
-  mutate(growth_response = scale(leaf_number))
-sb <- guild_df %>% 
-  dplyr::filter(species == "Snowbrush") %>% 
-  mutate(growth_response = scale(leaf_number))
-
-full_guild_model_df %>% 
-  dplyr::filter(p.value <= .05 & term != "(Intercept)")
-
-gf_mutualist_plot <- 
-  gf %>% 
-  mutate(Moisture = case_when(drought == "D" ~ "Low",
-                              drought == "ND" ~ "High")) %>% 
-  ggplot(aes(x=proportion_mutualist,y=growth_response,color=Moisture)) +
-  geom_point(alpha=.5,size=3) +
-  geom_smooth(method='lm',se=FALSE,color='black') +
-  annotate('text',
-           x = .85,
-           y = 3.5,
-           label = "P = 0.044",
-           fontface=2) +
-  labs(x='Proportion of putative fungal mutualists',y="Plant growth response",title="Grand fir",color="Moisture") +
-  theme_bw() +
-  theme(axis.title = element_text(face='bold',size=16),plot.title = element_text(face='bold',size=12,hjust=.5)) +
-  scale_color_manual(values = drought_colors)
-saveRDS(gf_mutualist_plot,"./Output/figs/ITS_gf_mutualist_plot.RDS")
-
-sb_mutualist_plot <- 
-  sb %>% 
-  ggplot(aes(x=proportion_mutualist,y=growth_response)) +
-  geom_point(alpha=.5,size=3) +
-  geom_smooth(method='lm',se=FALSE) +
-  # annotate('text',
-  #          x = .6,
-  #          y = 2,
-  #          label = full_guild_model_df %>% 
-  #            dplyr::filter(species == "Ceanothus" & term == "proportion_mutualist") %>%
-  #            pluck("PVAL")) +
-  labs(x="Proportion of mutualist ASVs",y="Plant growth response",title="Snowbrush") +
-  theme_bw() +
-  theme(axis.title = element_text(face='bold',size=16),plot.title = element_text(face='bold',size=12,hjust=.5))
-
-gf_pathogen_plot <- 
-  gf %>% 
-  dplyr::mutate(
-    proportion_pathogen = as.numeric(proportion_pathogen),
-    prop_pathogen_log10 = log10(proportion_pathogen + 1e-6)
-  ) %>% 
-  ggplot(aes(x = prop_pathogen_log10, y = growth_response)) +
-  geom_point(alpha = .5, size = 3) +
-  geom_smooth(method = "lm", se = FALSE) +
-  scale_x_continuous(
-    breaks = log10(c(1e-6, 1e-4, 1e-2, 1e-1, 1)),
-    labels = c("0", "0.0001", "0.01", "0.1", "1")
-  ) +
-  labs(x = "Proportion pathogen (log scale)", y = "", title = "Grand fir") +
-  theme_bw() +
-  theme(
-    axis.title = element_text(face = "bold", size = 16),
-    plot.title = element_text(face = "bold", size = 12, hjust = .5)
-  )
-gf_pathogen_plot
-saveRDS(gf_pathogen_plot,"R/shortt_additions/figures/test/gf_pathogen_logscale.RDS")
-
-
-sb_pathogen_plot <- 
-  sb %>% 
-  dplyr::mutate(
-    proportion_pathogen = as.numeric(proportion_pathogen),
-    prop_pathogen_log10 = log10(proportion_pathogen + 1e-6)
-  ) %>% 
-  ggplot(aes(x = prop_pathogen_log10, y = growth_response)) +
-  geom_point(alpha = .5, size = 3) +
-  geom_smooth(method = "lm", se = FALSE) +
-  scale_x_continuous(
-    breaks = log10(c(1e-6, 1e-4, 1e-2, 1e-1, 1)),
-    labels = c("0", "0.0001", "0.01", "0.1", "1")
-  ) +
-  labs(x = "Proportion of pathogen ASVs (log scale)", y = "", title = "Snowbrush") +
-  theme_bw() +
-  theme(
-    axis.title = element_text(face = "bold", size = 16),
-    legend.title = element_text(face = "bold", size = 14),
-    legend.text  = element_text(face = "bold", size = 12),
-    plot.title   = element_text(face = "bold", size = 12, hjust = .5)
-  )
-sb_pathogen_plot
-saveRDS(sb_pathogen_plot,"R/shortt_additions/figures/test/sb_pathogen_logscale.RDS")
-
-
-
-# prolly delete stuff below  ----------------------------------------------
-
-
-# build 3-panel plot for manuscript
-gf_fungal_mutualist_plot <- readRDS("./Output/figs/ITS_gf_mutualist_plot.RDS") + labs(x="Proportion of putative\nbacterial mutualists") + theme(legend.title = element_text(face='bold',size=14),
-                                                                                                                                                legend.text = element_text(face='bold',size=12),
-                                                                                                                                                legend.position = 'none', plot.title = element_text(face='bold',size=22), axis.title = element_text(face='bold',size=20)) + geom_point(size=6) + geom_smooth(method = 'lm',color='black')
-gf_bacterial_mutualist_plot <- readRDS("./Output/figs/16S_gf_mutualist_plot.RDS") + labs(x='Proportion of putative\nbacterial mutualists',color="Moisture") + theme(legend.position = 'none', plot.title = element_text(face='bold',size=22), axis.title = element_text(face='bold',size=20)) + geom_point(size=6) + geom_smooth(method='lm',color='black')
-sb_bacterial_pathogen_plot <- readRDS("./Output/figs/16S_sb_pathogen_plot.RDS") + labs(x='Proportion of putative\nbacterial pathogens',color="Moisture") + theme(plot.title = element_text(face='bold',size=22), axis.title = element_text(face='bold',size=20)) + geom_point(size=6) + geom_smooth(method='lm')
-
-pw <- 
-  (gf_fungal_mutualist_plot + gf_bacterial_mutualist_plot + sb_bacterial_pathogen_plot) &
-  ylab(NULL) & theme(plot.margin = margin(5.5, 5.5, 5.5, 0))
-guild_plots <- 
-  wrap_elements(pw) +
-  labs(tag = "Scaled plant growth measure\n") +
-  theme(
-    plot.tag = element_text(angle = 90,face='bold',size=16),
-    plot.tag.position = "left"
-  ) +
-  plot_layout(guides = 'collect',axis_title="collect") +
-  plot_annotation(title = "Fungal ASVs")
-guild_plots
-saveRDS(guild_plots,"./Output/figs/ALL_guild_plots.RDS")
-ggsave("./Output/figs/ALL_guild_plots.tiff",device = 'tiff',width = 24,height = 8,dpi=400)
-ggsave("./Output/figs/ALL_guild_plots.png",device = 'png',width = 24,height = 8,dpi=400)
-
-# saveRDS(guild_plots,"./Output/figs/ITS_Guild_Plots.RDS")
-bact_guild_plots <- readRDS("./Output/figs/16S_Guild_Plots.RDS") + plot_annotation(title = "Bacterial ASVs")
-saveRDS(bact_guild_plots,"./Output/figs/16S_Guild_Plots.RDS")
-
-guild_plots
-ggsave("./Output/figs/ITS_Guild_Plots.tiff",device = 'tiff',height = 8,width = 8,dpi=350)
-
-bact_guild_plots
-ggsave("./Output/figs/16S_Guild_Plots.tiff",device = 'tiff',height = 8,width = 8,dpi=350)
