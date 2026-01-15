@@ -6,13 +6,18 @@ library(fungaltraits); packageVersion("fungaltraits")
 library(broom); packageVersion("broom")
 library(lmerTest); packageVersion("lmerTest")
 library(broom.mixed); packageVersion("broom.mixed")
+library(ggthemes)
 
 
 source("./R/palettes.R")
 source("./R/scale01.R")
 drought_colors <- pal.discrete[c(2,5)]
 host_colors <- pal.discrete[c(7,10)] 
-fire_colors <- pal.discrete[c(18,2,14)]
+
+fire_colors <- setNames(
+  c("grey70", pal.discrete[c(18, 2, 14)]),
+  c("control", "0", "1", "3")
+)
 
 # functions
 clean_model_df <- function(x){
@@ -304,7 +309,8 @@ guild_plot_df <- guild_df %>%
     # nicer drought label if you want it
     Moisture = case_when(drought == "D"  ~ "Low",
                          drought == "ND" ~ "High",
-                         TRUE ~ as.character(drought))
+                         TRUE ~ as.character(drought)),
+    fire_freq = fct_na_value_to_level(factor(fire_freq), level = "control")
   )
 
 #plotting function:
@@ -444,7 +450,8 @@ guild_df2 <-guild_df %>%
     proportion_saprotroph = as.numeric(proportion_saprotroph),
     prop_mut_log10  = log10(proportion_mutualist  + eps),
     prop_path_log10 = log10(proportion_pathogen   + eps),
-    prop_sap_log10  = log10(proportion_saprotroph + eps)
+    prop_sap_log10  = log10(proportion_saprotroph + eps),
+    fire_freq = fct_na_value_to_level(factor(fire_freq), level = "control")
   )
 
 # combined traits  --------------------------------------------------------
@@ -716,5 +723,113 @@ saveRDS(results_all_comp, "R/shortt_additions/stats/p_hacked_ITS_results_combine
 
 
 # proportion mutualist bar graph ------------------------------------------
+bar_plot_fire_df <- guild_df2 %>% 
+  group_by(species, fire_freq) %>%
+  summarise(
+    mean_mutualist = mean(proportion_mutualist, na.rm = TRUE),
+    sd_mutualist   = sd(proportion_mutualist, na.rm = TRUE),
+    n              = n(),
+    se_mutualist   = sd_mutualist / sqrt(n),
+    mean_pathogen = mean(proportion_pathogen, na.rm = TRUE),
+    sd_pathogen   = sd(proportion_pathogen, na.rm = TRUE),
+    se_pathogen   = sd_pathogen / sqrt(n)
+  ) %>% 
+  mutate(
+    fire_freq = factor(fire_freq),
+  )
+
+bar_plot_drought_df <- guild_df2 %>% 
+  group_by(species, drought) %>%
+  summarise(
+    mean_mutualist = mean(proportion_mutualist, na.rm = TRUE),
+    sd_mutualist   = sd(proportion_mutualist, na.rm = TRUE),
+    n              = n(),
+    se_mutualist   = sd_mutualist / sqrt(n),
+    mean_pathogen = mean(proportion_pathogen, na.rm = TRUE),
+    sd_pathogen   = sd(proportion_pathogen, na.rm = TRUE),
+    se_pathogen   = sd_pathogen / sqrt(n)
+  )
+
+# plots -------------------------------------------------------------------
+
+p1 <- ggplot(bar_plot_fire_df,
+       aes(x = fire_freq, y = mean_mutualist, fill = fire_freq)) +
+  geom_col() +
+  geom_errorbar(aes(ymin = mean_mutualist - se_mutualist,
+                    ymax = mean_mutualist + se_mutualist),
+                width = .2,
+                position = position_dodge(.9)) +
+  facet_wrap(~species) +
+  scale_fill_manual(values = fire_colors) +
+  labs(
+    x = "Fire frequency",
+    y = "Mean proportion of mutualist fungi"
+  )+
+  theme_few()
+
+p2 <- ggplot(bar_plot_fire_df,
+       aes(x = fire_freq, y = mean_pathogen, fill = fire_freq)) +
+  geom_col() +
+  geom_errorbar(aes(ymin = mean_pathogen - se_pathogen,
+                    ymax = mean_pathogen + se_pathogen),
+                width = .2,
+                position = position_dodge(.9)) +
+  facet_wrap(~species) +
+  scale_fill_manual(values = fire_colors) +
+  labs(
+    x = "Fire frequency",
+    y = "Mean proportion of pathogen fungi"
+  )+
+  theme_few()
+
+p3 <- ggplot(bar_plot_drought_df,
+       aes(x = drought, y = mean_pathogen, fill = drought)) +
+  geom_col() +
+  geom_errorbar(aes(ymin = mean_pathogen - se_pathogen,
+                    ymax = mean_pathogen + se_pathogen),
+                width = .2,
+                position = position_dodge(.9)) +
+  facet_wrap(~species) +
+  scale_fill_manual(values = drought_colors) +
+  labs(
+    x = "Fire frequency",
+    y = "Mean proportion of pathogen fungi"
+  )+
+  theme_few()
+
+p4 <- ggplot(bar_plot_drought_df,
+       aes(x = drought, y = mean_mutualist, fill = drought)) +
+  geom_col() +
+  geom_errorbar(aes(ymin = mean_mutualist - se_mutualist,
+                    ymax = mean_mutualist + se_mutualist),
+                width = .2,
+                position = position_dodge(.9)) +
+  facet_wrap(~species) +
+  scale_fill_manual(values = drought_colors) +
+  labs(
+    x = "Fire frequency",
+    y = "Mean proportion of mutualist fungi"
+  )+
+  theme_few()
+
+p4
+
+combined_bar_plot_fire <- (p1 | p2)
 
 
+combined_bar_plot_fire
+ggsave(combined_bar_plot_fire,
+       filename = "R/shortt_additions/figures/mean_proportion_guilds_fire_bar.pdf",
+       width = 10,
+       height = 4,
+       units = "in",
+       dpi = 300)
+
+combined_bar_plot_drought <- (p4 | p3)
+combined_bar_plot_drought
+ggsave(combined_bar_plot_drought,
+       filename = "R/shortt_additions/figures/mean_proportion_guilds_drought_bar.pdf",
+       width = 10,
+       height = 4,
+       units = "in",
+       dpi = 300)

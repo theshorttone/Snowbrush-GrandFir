@@ -252,9 +252,6 @@ plot_guild_growth_index_log <- function(df,
 
 
 
-
-
-
 # Grand fir, pathogens, color by drought
 p1 <- plot_guild_growth_index_log(guild_df_comp, "GrandFir", "pathogen", "fire_freq")
 p2 <- plot_guild_growth_index_log(guild_df_comp, "GrandFir", "mutualist", "fire_freq")
@@ -277,6 +274,121 @@ ggsave("./R/shortt_additions/figures/16S_combined_growth_drought.png",
        plot = combined_growth,
        width = 10, height = 8, units = "in", dpi = 300)
 
-results_drought <- make_results_df(guild_df_comp, interact = "drought")
-results_fire    <- make_results_df(guild_df2, interact = "fire_freq")
+# results_drought <- make_results_df(guild_df_comp, interact = "drought")
+# results_fire    <- make_results_df(guild_df2, interact = "fire_freq")
+
+# bar graphs  -------------------------------------------------------------
+
+# proportion mutualist bar graph ------------------------------------------
+
+bar_plot_fire_df <- guild_df_comp %>% 
+  group_by(species, fire_freq) %>%
+  summarise(
+    mean_mutualist = mean(proportion_mutualist, na.rm = TRUE),
+    sd_mutualist   = sd(proportion_mutualist, na.rm = TRUE),
+    n              = n(),
+    se_mutualist   = sd_mutualist / sqrt(n),
+    mean_pathogen = mean(proportion_pathogen, na.rm = TRUE),
+    sd_pathogen   = sd(proportion_pathogen, na.rm = TRUE),
+    se_pathogen   = sd_pathogen / sqrt(n)
+  ) %>% 
+  mutate(
+    fire_freq = factor(fire_freq),
+  )
+
+bar_plot_drought_df <- guild_df_comp %>% 
+  group_by(species, drought) %>%
+  summarise(
+    mean_mutualist = mean(proportion_mutualist, na.rm = TRUE),
+    sd_mutualist   = sd(proportion_mutualist, na.rm = TRUE),
+    n              = n(),
+    se_mutualist   = sd_mutualist / sqrt(n),
+    mean_pathogen = mean(proportion_pathogen, na.rm = TRUE),
+    sd_pathogen   = sd(proportion_pathogen, na.rm = TRUE),
+    se_pathogen   = sd_pathogen / sqrt(n)
+  )
+
+# plots -------------------------------------------------------------------
+
+p1 <- ggplot(bar_plot_fire_df,
+             aes(x = fire_freq, y = mean_mutualist, fill = fire_freq)) +
+  geom_col() +
+  geom_errorbar(aes(ymin = mean_mutualist - se_mutualist,
+                    ymax = mean_mutualist + se_mutualist),
+                width = .2,
+                position = position_dodge(.9)) +
+  facet_wrap(~species) +
+  scale_fill_manual(values = fire_colors) +
+  labs(
+    x = "Fire frequency",
+    y = "Mean proportion of mutualist bacteria"
+  )+
+  theme_few()
+
+p2 <- ggplot(bar_plot_fire_df,
+             aes(x = fire_freq, y = mean_pathogen, fill = fire_freq)) +
+  geom_col() +
+  geom_errorbar(aes(ymin = mean_pathogen - se_pathogen,
+                    ymax = mean_pathogen + se_pathogen),
+                width = .2,
+                position = position_dodge(.9)) +
+  facet_wrap(~species) +
+  scale_fill_manual(values = fire_colors) +
+  labs(
+    x = "Fire frequency",
+    y = "Mean proportion of pathogen bacteria"
+  )+
+  theme_few()
+
+p3 <- ggplot(bar_plot_drought_df,
+             aes(x = drought, y = mean_pathogen, fill = drought)) +
+  geom_col() +
+  geom_errorbar(aes(ymin = mean_pathogen - se_pathogen,
+                    ymax = mean_pathogen + se_pathogen),
+                width = .2,
+                position = position_dodge(.9)) +
+  facet_wrap(~species) +
+  scale_fill_manual(values = drought_colors) +
+  labs(
+    x = "Fire frequency",
+    y = "Mean proportion of pathogen bacteria"
+  )+
+  theme_few()
+
+p4 <- ggplot(bar_plot_drought_df,
+             aes(x = drought, y = mean_mutualist, fill = drought)) +
+  geom_col() +
+  geom_errorbar(aes(ymin = mean_mutualist - se_mutualist,
+                    ymax = mean_mutualist + se_mutualist),
+                width = .2,
+                position = position_dodge(.9)) +
+  facet_wrap(~species) +
+  scale_fill_manual(values = drought_colors) +
+  labs(
+    x = "Fire frequency",
+    y = "Mean proportion of mutualist bacteria"
+  )+
+  theme_few()
+
+p4
+
+combined_bar_plot_fire <- (p1 | p2)
+
+
+combined_bar_plot_fire
+ggsave(combined_bar_plot_fire,
+       filename = "R/shortt_additions/figures/mean_bacteria_proportion_guilds_fire_bar.pdf",
+       width = 10,
+       height = 4,
+       units = "in",
+       dpi = 300)
+
+combined_bar_plot_drought <- (p4 | p3)
+combined_bar_plot_drought
+ggsave(combined_bar_plot_drought,
+       filename = "R/shortt_additions/figures/mean_proportion_bacteria_guilds_drought_bar.pdf",
+       width = 10,
+       height = 4,
+       units = "in",
+       dpi = 300)
 
