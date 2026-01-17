@@ -19,6 +19,13 @@ fire_colors <- setNames(
   c("control", "0", "1", "3")
 )
 
+site_colors <- c(
+  "Site 1" = "#4cbfe6", "Site 2" = "#2443f0",
+  "Site 3" = "#f0c424", "Site 4" = "#db7e04",
+  "Site 5" = "#cc6866", "Site 6" = "#9e0402"
+)
+
+
 # functions
 clean_model_df <- function(x){
   broom.mixed::tidy(x) %>% 
@@ -41,11 +48,48 @@ traits_to_ignore <- c(
 
 # functions ---------------------------------------------------------------
 
+clean_func <- function (df){
+  df_samples <- df %>%
+    mutate(
+      plot_nmds_color = case_when(
+        !is.na(.data$inoculum) & .data$inoculum != "" ~ str_replace(.data$inoculum, "^.*_", ""),
+        TRUE ~ recode(
+          .data$other_frompreviouscolumn,
+          "Site1" = "Site 1",
+          "Site2" = "Site 2",
+          "Site3" = "Site 3",
+          "Site4" = "Site 4",
+          "Site5" = "Site 5",
+          "Site6" = "Site 6",
+          .default = NA_character_
+        )),
+      plot_nmds_color = recode(plot_nmds_color,
+                               "W1" = "Site 1",
+                               "W2" = "Site 2",
+                               "W3" = "Site 3",
+                               "W4" = "Site 4",
+                               "W5" = "Site 5",
+                               "W6" = "Site 6",
+                               .default = .data$plot_nmds_color
+      ),
+      fire_freq = if_else(
+        .data$other_frompreviouscolumn %in% paste0("Site", 1:6),
+        case_when(
+          .data$other_frompreviouscolumn %in% c("Site1", "Site2") ~ 0,
+          .data$other_frompreviouscolumn %in% c("Site3", "Site4") ~ 1,
+          .data$other_frompreviouscolumn %in% c("Site5", "Site6") ~ 3
+        ),
+        as.numeric(.data$fire_freq)
+      )
+    )
+}
 # load data
 fung <- readRDS("./Output/phyloseq_objects/ITS_clean_phyloseq_object.RDS")
 fung@sam_data %>% row.names()
 
 fung_ra <- transform_sample_counts(fung,function(x){x/sum(x)})
+
+a <- as.data.frame(sample_data(fung_ra))
 tax_df <- as.data.frame(tax_table(fung_ra))
 
 
@@ -250,8 +294,6 @@ pathogen_guilds <-
   grep("Plant [P,p]athogen|Fungal Parasite",(fung_ra_traits@tax_table[,8]),value = TRUE) %>% 
   grep(pattern="Ectomycorrhizal",x=.,value = TRUE, invert = TRUE) %>% 
   unique()
-
-
 
 mutualist_proportions <- 
   fung_ra %>% 
@@ -829,6 +871,368 @@ combined_bar_plot_drought <- (p4 | p3)
 combined_bar_plot_drought
 ggsave(combined_bar_plot_drought,
        filename = "R/shortt_additions/figures/mean_proportion_guilds_drought_bar.pdf",
+       width = 10,
+       height = 4,
+       units = "in",
+       dpi = 300)
+
+
+# inoculum ----------------------------------------------------------------
+
+site1.inoc.full <- readRDS("Output/phyloseq_objects/ITS_site1.inoc.full.RDS")
+site2.inoc.full <- readRDS("Output/phyloseq_objects/ITS_site2.inoc.full.RDS")
+site3.inoc.full <- readRDS("Output/phyloseq_objects/ITS_site3.inoc.full.RDS")
+site4.inoc.full <- readRDS("Output/phyloseq_objects/ITS_site4.inoc.full.RDS")
+site5.inoc.full <- readRDS("Output/phyloseq_objects/ITS_site5.inoc.full.RDS")
+site6.inoc.full <- readRDS("Output/phyloseq_objects/ITS_site6.inoc.full.RDS")
+
+inoc.full<- merge_phyloseq(site1.inoc.full,site2.inoc.full,site3.inoc.full,
+                                 site4.inoc.full,site5.inoc.full,site6.inoc.full)
+
+
+# Pull sample data
+df_samples <- sample_data(inoc.full) %>%
+  data.frame()
+
+# Clean (your function)
+df_samples <- clean_func(df_samples)
+
+# Keep only inoculum
+df_samples <- df_samples %>%
+  dplyr::filter(tolower(trimws(community)) == "inoculum")
+
+# Push back into phyloseq
+sample_data(inoc.full) <- sample_data(df_samples)
+
+# Prune the phyloseq object to match
+inoc.full <- prune_samples(rownames(df_samples), inoc.full)
+
+
+
+genera <- inoc.full@tax_table[,6] %>% str_remove("^g__")
+species <- inoc.full@tax_table[,7] %>% str_remove("^s__")
+
+fungal_traits_sp <- 
+  data.frame(genus = genera) %>% 
+  mutate(
+    species = paste(genus, species, sep = "_") %>%
+      str_to_lower(),
+    genus = str_to_lower(genus)
+  ) %>% 
+  filter(species != "na_na") %>% 
+  distinct(species, .keep_all = TRUE) %>% 
+  left_join(traits_db_norm, by = "species", multiple = "all") %>%
+  select(-all_of(traits_to_ignore))
+
+
+#genus level assignment for those not matched at species 
+
+fungal_traits_genus <- 
+  data.frame(genus = genera) %>% 
+  mutate(
+    Genus_key = str_trim(genus) %>% str_to_lower()
+  ) %>% 
+  filter(!str_detect(Genus_key, "gen_incertae_sedis")) %>% 
+  distinct(Genus_key, .keep_all = TRUE) %>% 
+  left_join(traits_db_norm, by = c("Genus_key" = "Genus"), multiple = "all") %>% 
+  select(-any_of(traits_to_ignore))
+traits_by_species <- fungal_traits_sp %>%
+  group_by(species, genus) %>%
+  summarise(
+    n_trait_rows = n(),
+    # numeric traits: mean
+    across(where(is.numeric), ~mean(.x, na.rm = TRUE)),
+    # character traits: list/union
+    across(where(is.character), collapse_chars),
+    .groups = "drop"
+  )
+
+traits_just_genus <- fungal_traits_genus %>%
+  group_by(Genus_key) %>%
+  summarise(
+    n_trait_rows = n(),
+    across(where(is.numeric), ~mean(.x, na.rm = TRUE)),
+    across(where(is.character), collapse_chars),
+    .groups = "drop"
+  ) %>% filter(!is.na(speciesMatched))
+
+
+traits_to_coalesce <- c(
+  "guild_fg",
+  "trophic_mode_fg",
+  "culture_media",
+  "notes_fg",
+  "source_funguild_fg",
+  "speciesMatched", 
+  "confidence_fg"
+)
+
+cols <- traits_to_coalesce
+cols_genus <- paste0(cols, ".genus")
+
+traits_one <- traits_by_species %>%
+  left_join(
+    traits_just_genus %>% select(Genus_key, n_trait_rows, all_of(cols)),
+    by = c("genus" = "Genus_key"),
+    suffix = c("", ".genus")
+  ) %>%
+  mutate(
+    guild_source = case_when(
+      !is.na(guild_fg) ~ "species",
+      is.na(guild_fg) & !is.na(guild_fg.genus) ~ "genus",
+      TRUE ~ "none"
+    )
+  ) %>%
+  mutate(
+    across(all_of(cols), ~ na_if(.x, "")) # optional
+  )
+
+# do the coalesce using base R, then put back into the data frame
+traits_one[cols] <- Map(
+  coalesce,
+  traits_one[cols],
+  traits_one[cols_genus]
+)
+
+traits_df <- traits_one %>%
+  select(-ends_with(".genus")) %>% 
+  select(species, genus, guild_source, n_trait_rows, all_of(traits_to_coalesce))
+
+
+## adding fungal traits to tax table --------------------------------------
+
+
+#Build a per-ASV lookup table from tax_table (rows = taxa_names)
+tax_lookup <- tax_table(inoc.full) %>%
+  as("matrix") %>%
+  as.data.frame(stringsAsFactors = FALSE) %>%
+  tibble::rownames_to_column("taxon_id") %>%
+  mutate(
+    genus_raw   = str_remove(Genus, "^g__") %>% str_trim(),
+    species_raw = str_remove(Species, "^s__") %>% str_trim(),
+    species_key = paste(genus_raw, coalesce(species_raw, "NA"), sep = "_") %>%
+      str_to_lower()
+  )
+
+#Join traits onto each ASV via species_key 
+tax_with_traits <- tax_lookup %>%
+  left_join(traits_df, by = c("species_key" = "species"))
+
+# taxa_df <- tax_with_traits %>%
+#   select(taxon_id, everything(), -species_key) %>%  
+#   tibble::column_to_rownames("taxon_id")
+
+
+## phyloseq with traits ----------------------------------------------------
+
+tt <- as(tax_table(inoc.full), "matrix") %>%
+  as.data.frame(stringsAsFactors = FALSE)
+
+taxon_id <- rownames(tt)
+
+tax_key <- tibble(
+  taxon_id = taxon_id,
+  genus_raw   = str_remove(tt$Genus, "^g__") %>% str_trim(),
+  species_raw = str_remove(tt$Species, "^s__") %>% str_trim()
+) %>%
+  mutate(
+    species_clean = case_when(
+      is.na(species_raw) | species_raw == "" ~ NA_character_,
+      TRUE ~ species_raw
+    ),
+    species_key = paste(genus_raw, coalesce(species_clean, "na"), sep = "_") %>% str_to_lower()
+  )
+
+trait_cols <- c("guild_fg", "guild_source", "trophic_mode_fg",
+                "notes_fg", "source_funguild_fg", "culture_media")
+
+tax_traits <- tax_key %>%
+  left_join(traits_df %>% select(species, any_of(trait_cols)),
+            by = c("species_key" = "species"))
+
+# 3) append traits into tax_table (as extra columns)
+tt2 <- tt
+for (nm in trait_cols) tt2[[nm]] <- tax_traits[[nm]]
+rownames(tt2) <- tax_traits$taxon_id
+
+inoculation_traits <- inoc.full   # copy the phyloseq object
+
+# ...build tt2 as you already did...
+
+tax_table(inoculation_traits) <- tax_table(as.matrix(tt2))
+
+# make relative abundance version of phyloseq object
+inoculation_traits_ra <- transform_sample_counts(inoculation_traits,function(x){x/sum(x)})
+
+#sanity check
+a <- as.data.frame(tax_table(inoculation_traits_ra))
+
+
+## calculate proportions of major guilds ------------------------------------
+a <- (as.data.frame(inoculation_traits_ra@tax_table[,8]))
+
+a$guild_fg %>% unique
+
+mutualist_guilds <- 
+  grep("Ectomycorrhizal",(inoculation_traits_ra@tax_table[,8]),value = TRUE) %>% 
+  unique()
+
+# identify "saprotrophs"
+saprotroph_guilds <- 
+  grep("[S,s]aprotroph",(inoculation_traits_ra@tax_table[,8]),value = TRUE) %>% 
+  grep(pattern="Ectomycorrhizal",x=.,value = TRUE, invert = TRUE) %>% 
+  unique()
+
+# identify "pathogens"
+pathogen_guilds <- 
+  grep("Plant [P,p]athogen|Fungal Parasite",(inoculation_traits_ra@tax_table[,8]),value = TRUE) %>% 
+  grep(pattern="Ectomycorrhizal",x=.,value = TRUE, invert = TRUE) %>% 
+  unique()
+
+mutualist_proportions <- 
+  inoculation_traits_ra %>% 
+  subset_taxa(inoculation_traits_ra@tax_table[,8] %in% mutualist_guilds) %>% 
+  sample_sums()
+
+mutualism_df <- 
+  microbiome::meta(inoculation_traits_ra) %>% 
+  mutate(proportion_mutualist = mutualist_proportions)
+
+saprotroph_proportions <- 
+  inoculation_traits_ra %>% 
+  subset_taxa(inoculation_traits_ra@tax_table[,8] %in% saprotroph_guilds) %>% 
+  sample_sums()
+
+saprotroph_df <- 
+  microbiome::meta(inoculation_traits_ra) %>% 
+  mutate(proportion_saprotroph = saprotroph_proportions)
+
+pathogen_proportions <- 
+  inoculation_traits_ra %>% 
+  subset_taxa(inoculation_traits_ra@tax_table[,8] %in% pathogen_guilds) %>% 
+  sample_sums()
+
+pathogen_df <- 
+  microbiome::meta(inoculation_traits_ra) %>% 
+  mutate(proportion_pathogen = pathogen_proportions)
+
+
+# join together all 3 major guilds
+guild_df_inoc <- 
+  mutualism_df %>% 
+  full_join(saprotroph_df) %>% 
+  full_join(pathogen_df)
+
+bar_plot_fire_df <- guild_df_inoc %>% 
+  group_by(species, fire_freq) %>%
+  summarise(
+    mean_mutualist = mean(proportion_mutualist, na.rm = TRUE),
+    sd_mutualist   = sd(proportion_mutualist, na.rm = TRUE),
+    n              = n(),
+    se_mutualist   = sd_mutualist / sqrt(n),
+    mean_pathogen = mean(proportion_pathogen, na.rm = TRUE),
+    sd_pathogen   = sd(proportion_pathogen, na.rm = TRUE),
+    se_pathogen   = sd_pathogen / sqrt(n)
+  ) %>% 
+  mutate(
+    fire_freq = factor(fire_freq),
+  )
+
+bar_plot_site_df <- guild_df_inoc %>% 
+  group_by(species, plot_nmds_color) %>%
+  summarise(
+    mean_mutualist = mean(proportion_mutualist, na.rm = TRUE),
+    sd_mutualist   = sd(proportion_mutualist, na.rm = TRUE),
+    n              = n(),
+    se_mutualist   = sd_mutualist / sqrt(n),
+    mean_pathogen = mean(proportion_pathogen, na.rm = TRUE),
+    sd_pathogen   = sd(proportion_pathogen, na.rm = TRUE),
+    se_pathogen   = sd_pathogen / sqrt(n)
+  )
+
+# plots -------------------------------------------------------------------
+
+p1 <- ggplot(bar_plot_fire_df,
+             aes(x = fire_freq, y = mean_mutualist, fill = fire_freq)) +
+  geom_col() +
+  geom_errorbar(aes(ymin = mean_mutualist - se_mutualist,
+                    ymax = mean_mutualist + se_mutualist),
+                width = .2,
+                position = position_dodge(.9)) +
+  facet_wrap(~species) +
+  scale_fill_manual(values = fire_colors) +
+  labs(
+    title = "Inoculum",
+    x = "Fire frequency",
+    y = "Mean proportion of mutualist fungi"
+  )+
+  theme_few()
+p1
+
+p2 <- ggplot(bar_plot_fire_df,
+             aes(x = fire_freq, y = mean_pathogen, fill = fire_freq)) +
+  geom_col() +
+  geom_errorbar(aes(ymin = mean_pathogen - se_pathogen,
+                    ymax = mean_pathogen + se_pathogen),
+                width = .2,
+                position = position_dodge(.9)) +
+  facet_wrap(~species) +
+  scale_fill_manual(values = fire_colors) +
+  labs(
+    title = "Inoculum",
+    x = "Fire frequency",
+    y = "Mean proportion of pathogen fungi"
+  )+
+  theme_few()
+p2
+p3 <- ggplot(bar_plot_site_df,
+             aes(x = plot_nmds_color, y = mean_mutualist, fill = plot_nmds_color)) +
+  geom_col() +
+  geom_errorbar(aes(ymin = mean_mutualist - se_mutualist,
+                    ymax = mean_mutualist + se_mutualist),
+                width = .2,
+                position = position_dodge(.9)) +
+  facet_wrap(~species) +
+  scale_fill_manual(values = site_colors) +
+  labs(
+    title = "Inoculum",
+    x = "Fire frequency",
+    y = "Mean proportion of mutualist fungi"
+  )+
+  theme_few()
+p3
+
+p4 <- ggplot(bar_plot_site_df,
+             aes(x = plot_nmds_color, y = mean_pathogen, fill = plot_nmds_color)) +
+  geom_col() +
+  geom_errorbar(aes(ymin = mean_pathogen - se_pathogen,
+                    ymax = mean_pathogen + se_pathogen),
+                width = .2,
+                position = position_dodge(.9)) +
+  facet_wrap(~species) +
+  scale_fill_manual(values = site_colors) +
+  labs(
+    title = "Inoculum",
+    x = "Fire frequency",
+    y = "Mean proportion of pathogen fungi"
+  )+
+  theme_few()
+p4
+
+a <- p1|p2
+
+a
+ggsave(a,
+       filename = "R/shortt_additions/figures/mean_fugal_proportion_guilds_inoculum_fire.pdf",
+       width = 10,
+       height = 4,
+       units = "in",
+       dpi = 300)
+
+a <- p3 | p4
+a
+ggsave(a,
+       filename = "R/shortt_additions/figures/mean_fugal_proportion_guilds_inoculum_site.pdf",
        width = 10,
        height = 4,
        units = "in",
