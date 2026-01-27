@@ -1,3 +1,7 @@
+##for corncob; make it a factor and make the first level the intercept so we can compare to that 
+##random forest (continuous) is like a reverse corncob, so you take the corncob variables and reverse them to get the rf variables.
+#then you get to vip package to do most important 10 taxa to predict environmental variable 
+#indicator species analysis as the 3rd option but this is catagorical 
 
 library(tidyverse); packageVersion("tidyverse")
 library(phyloseq); packageVersion("phyloseq")
@@ -8,7 +12,7 @@ library(lmerTest); packageVersion("lmerTest")
 library(broom.mixed); packageVersion("broom.mixed")
 library(ggthemes)
 
-
+source("./R/shortt_additions/funguild.R")
 source("./R/palettes.R")
 source("./R/scale01.R")
 drought_colors <- pal.discrete[c(2,5)]
@@ -85,13 +89,21 @@ clean_func <- function (df){
 }
 # load data
 fung <- readRDS("./Output/phyloseq_objects/ITS_clean_phyloseq_object.RDS")
+
+
+test <- assign_funguild_to_phyloseq(fung)
+ 
+fung_traits <- test$ps_traits
+ 
+
+a <- test[1]
+
 fung@sam_data %>% row.names()
 
 fung_ra <- transform_sample_counts(fung,function(x){x/sum(x)})
 
 a <- as.data.frame(sample_data(fung_ra))
 tax_df <- as.data.frame(tax_table(fung_ra))
-
 
 
 traits_meta <- read_csv("https://github.com/traitecoevo/fungaltraits/releases/download/v0.0.3/funtothefun.csv")
@@ -126,7 +138,6 @@ fungal_traits_sp <-
   left_join(traits_db_norm, by = "species", multiple = "all") %>%
   select(-all_of(traits_to_ignore))
          
-
 #genus level assignment for those not matched at species 
 
 fungal_traits_genus <- 
@@ -282,6 +293,7 @@ fung_traits_ra <- transform_sample_counts(fung_ra_traits,function(x){x/sum(x)})
 mutualist_guilds <- 
   grep("Ectomycorrhizal",(fung_ra_traits@tax_table[,8]),value = TRUE) %>% 
   unique()
+
 
 # identify "saprotrophs"
 saprotroph_guilds <- 
@@ -542,7 +554,7 @@ results_all <- dplyr::bind_rows(results_drought, results_fire) %>%
   filter(term != "(Intercept)") %>% 
   filter(p.value <= .05)
 
-saveRDS(results_all, "R/shortt_additions/stats/p_hacked_ITS_results_all_individual_growth(including log).RDS")
+#saveRDS(results_all, "R/shortt_additions/stats/p_hacked_ITS_results_all_individual_growth(including log).RDS")
 
 
 
@@ -758,9 +770,6 @@ results_all_comp     <- bind_rows(results_drought_comp, results_fire_comp) %>%
   filter(term != "(Intercept)") %>%
   filter(p.value <= .1)
 saveRDS(results_all_comp, "R/shortt_additions/stats/p_hacked_ITS_results_combined_growth(including log).RDS")
-
-
-
 
 
 
@@ -1237,3 +1246,218 @@ ggsave(a,
        height = 4,
        units = "in",
        dpi = 300)
+
+
+# EcM taxa table ----------------------------------------------------------
+phylum_colors <- c(
+  "#CBD588", "#5F7FC7", "orange", "#DA5724", "#508578", "#CD9BCD",
+  "#8a592f", "#673770", "#D14285", "#652926", "#C84248", 
+  "#8569D5", "#5E738F", "#D1A33D", "#8A7C64", "#599861",
+  
+  # Added 5 new distinct colors
+  "#1FA187",  # teal
+  "#F6E8C3",  # light sand
+  "#B8E186",  # soft green (not overlapping your darker greens)
+  "#E66101",  # warm orange-brown, distinct from pure orange
+  "#4D4D4D"   # neutral charcoal for grounding
+)
+
+mutualist_guilds <- 
+  grep("Ectomycorrhizal",(fung_ra_traits@tax_table[,8]),value = TRUE) %>% 
+  unique()
+
+ecm_ps <-subset_samples(fung_ra_traits, host == "Abies grandis") 
+
+a <- data.frame(sample_data(ecm_ps), check.names = FALSE)
+
+sam_data <- a %>%
+  mutate( fire_freq = fct_na_value_to_level(factor(fire_freq), level = "control")
+)
+
+sample_data(ecm_ps) <- sam_data
+
+ecm_ps <- ecm_ps%>%subset_taxa(guild_fg %in% mutualist_guilds)
+
+ecm_taxa <- as.data.frame(tax_table(ecm_ps)) %>% unique()
+
+ecm_taxa$Genus %>% unique()
+ps_genus_20 <- ecm_ps %>%
+  tax_glom(taxrank = "Genus") %>%                    
+  transform_sample_counts(function(x) {x / sum(x)}) %>% 
+  psmelt() %>%                                         
+  filter(Abundance > 0.03) %>%                        
+  mutate(Family = ifelse(Abundance < 0.2, "Other", Genus))
+
+ggplot(ps_genus_20)+
+  aes(x = sample_name, y = Abundance, fill = fct_rev(fct_infreq(Genus))) +
+  facet_wrap(~inoculum_site)+
+  geom_col(position = "fill") +  
+  scale_fill_manual(values = phylum_colors) +
+  theme(legend.position = "right",                 
+        legend.title = element_text(size = 8),      
+        legend.text = element_text(size = 6),      
+        legend.key.size = unit(0.5, "lines"),       
+        legend.spacing = unit(0.5, "lines")) +  
+  guides(alpha = "none")+
+  labs(
+    x = "Fire_freq",
+    y = "Proportion of Genera",
+    fill = "Genus",
+    title = "EcM general in final community"
+  )+
+  theme_few()
+
+a <- as.data.frame(tax_table(ecm_ps))
+
+a <- as.data.frame(sam_data(ecm_ps))
+
+mutualist_guilds <- 
+  grep("Ectomycorrhizal",(inoculation_traits_ra@tax_table[,8]),value = TRUE) %>% 
+  unique()
+
+
+ecm_ps <-subset_samples(inoculation_traits_ra) 
+
+a <- data.frame(sample_data(ecm_ps), check.names = FALSE)
+
+sam_data <- a %>%
+  mutate( fire_freq = fct_na_value_to_level(factor(fire_freq), level = "control")
+  )
+
+sample_data(ecm_ps) <- sam_data
+
+ecm_ps <- ecm_ps%>%subset_taxa(guild_fg %in% mutualist_guilds)
+
+ecm_taxa <- as.data.frame(tax_table(ecm_ps)) %>% unique()
+
+ecm_taxa$Genus %>% unique()
+ps_genus_20 <- ecm_ps %>%
+  tax_glom(taxrank = "Genus") %>%                    
+  transform_sample_counts(function(x) {x / sum(x)}) %>% 
+  psmelt() %>%                                         
+  filter(Abundance > 0.01) %>%                        
+  mutate(Family = ifelse(Abundance < 0.2, "Other", Genus))
+
+ggplot(ps_genus_20)+
+  aes(x = fire_freq, y = Abundance, fill = fct_rev(fct_infreq(Genus))) +
+  geom_col(position = "fill") +  
+  scale_fill_manual(values = phylum_colors) +
+  theme(legend.position = "right",                 
+        legend.title = element_text(size = 8),      
+        legend.text = element_text(size = 6),      
+        legend.key.size = unit(0.5, "lines"),       
+        legend.spacing = unit(0.5, "lines")) +  
+  #facet_wrap(~colonized)+
+  guides(alpha = "none")+
+  labs(
+    x = "Fire_freq",
+    y = "Proportion of Families",
+    fill = "Genus",
+    title = "EcM general in Inoculum"
+  )+
+  theme_few()
+
+a <- as.data.frame(tax_table(ecm_ps))
+
+a <- as.data.frame(sam_data(ecm_ps))
+
+
+# Corncob for growth ------------------------------------------------------
+library(corncob)
+fung <- readRDS("./Output/phyloseq_objects/ITS_clean_phyloseq_object.RDS")
+
+
+#adding scaled and combined growth 
+
+growth_traits <- c("leaf_number","shoot_dm","final_root_dm")
+
+
+sam_df <- data.frame(sample_data(fung), check.names = FALSE)
+
+sam_df <- sam_df %>%
+mutate(across(all_of(growth_traits), scale01)) %>%
+mutate(growth_index = rowMeans(dplyr::across(all_of(growth_traits)), na.rm = TRUE))
+
+sample_data(fung) <- sample_data(sam_df)
+
+ps_filt <- fung %>%
+  prune_samples(sample_sums(.) > 0, .) %>%
+  prune_taxa(taxa_sums(.) > 10, .)
+
+ps <- fung
+
+sample_data(ps)$inoculum_site <- factor(sample_data(ps)$inoculum_site)
+sample_data(ps)$fire_freq <- factor(sample_data(ps)$fire_freq)
+
+
+#change to the random forest model 
+#use vIP package to interpret bc forest is confusing 
+fit <- differentialTest(
+  formula = ~ growth_index,
+  phi.formula = ~ 1,
+  formula_null = ~ 1,
+  phi.formula_null = ~ 1,
+  test = "Wald",
+  fdr_cutoff = 0.05,
+  data = ps
+)
+
+# fit2 <- differentialTest(
+#   formula = ~ growth_index,
+#   phi.formula = ~ growth_index,
+#   formula_null = ~ 1,
+#   phi.formula_null = ~ 1,
+#   test = "Wald",
+#   fdr_cutoff = 0.05,
+#   data = ps
+# )
+res <- data.frame(
+  taxon_id = names(fit$p),
+  p_value  = unname(fit$p),
+  q_value  = unname(fit$p_fdr),
+  stringsAsFactors = FALSE
+)
+
+# --- taxonomy for all ASVs ---
+tax <- as.data.frame(tax_table(ps))
+tax$taxon_id <- rownames(tax)
+
+# --- extract coefficients from bbdml models ---
+# this returns a tidy data frame with terms + estimates per ASV
+
+term <- "growth_index"
+
+coef_df <- bind_rows(lapply(names(fit$all_models), function(id) {
+  m <- fit$all_models[[id]]
+  
+  s <- tryCatch(summary(m), error = function(e) NULL)
+  if (is.null(s)) return(NULL)
+  
+  # Try to find a coefficient table in common places
+  # (different versions/classes store it differently)
+  tab <- NULL
+  if (!is.null(s$coefficients)) tab <- s$coefficients
+  if (is.null(tab) && !is.null(s$coef)) tab <- s$coef
+  if (is.null(tab) && !is.null(s$mean)) tab <- s$mean
+  
+  if (is.null(tab)) return(NULL)
+  
+  tab <- as.data.frame(tab)
+  tab$term <- rownames(tab)
+  tab$taxon_id <- id
+  
+  # Find the estimate column (often "Estimate")
+  est_col <- intersect(c("Estimate", "estimate"), colnames(tab))
+  if (length(est_col) == 0) return(NULL)
+  
+  out <- tab %>%
+    filter(term == !!term) %>%
+    transmute(taxon_id, estimate = .data[[est_col[1]]])
+  
+  if (nrow(out) == 0) return(NULL)
+  out
+}))
+
+# sanity check
+nrow(coef_df)
+head(coef_df)

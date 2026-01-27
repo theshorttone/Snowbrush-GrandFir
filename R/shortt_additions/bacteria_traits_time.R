@@ -392,3 +392,7 @@ ggsave(combined_bar_plot_drought,
        units = "in",
        dpi = 300)
 
+
+# random forest model  ----------------------------------------------------
+
+library(randomForest); packageVersion("randomForest")
