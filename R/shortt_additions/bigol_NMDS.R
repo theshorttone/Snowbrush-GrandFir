@@ -78,7 +78,7 @@ make_ord_plot <- function(ps,
     scale_color_manual(values = site_colors,
                        name = "Inoculation site")+
     scale_shape_manual(
-      values = c(16, 17),
+      values = c(16, 17, 11),
       name = "Community",
     )
   
@@ -96,7 +96,7 @@ make_ord_plot <- function(ps,
       linewidth = 0.7
     ) +
     scale_color_manual(values = burn_colors, name = "Fire frequency") +
-    scale_linetype_manual(values = c("solid", "longdash"))+
+    scale_linetype_manual(values = c("solid", "longdash", "dotted"))+
     guides(
       color = guide_legend(order = 1),
       fill  = guide_legend(order = 2),
@@ -165,7 +165,15 @@ inoc.full <- merge_phyloseq(site1.inoc.full,site2.inoc.full,site3.inoc.full,
 df_samples <- sample_data(inoc.full) 
 df_samples <- data.frame(df_samples)   
   
-df_samples <- clean_func(df_samples)
+df_samples <- clean_func(df_samples) %>% 
+  mutate(
+    community2 = dplyr::case_when(
+      species == "Snowbrush" ~ "final snowbrush",
+      species == "GrandFir"  ~ "final grandfir",
+      TRUE ~ community
+    )
+  )
+
 sample_data(inoc.full) <- sample_data(df_samples)
 
 
@@ -173,10 +181,10 @@ make_ord_plot(
   ps = inoc.full,
   method = "NMDS",
   distance = "bray",
-  shape_var = "community",
+  shape_var = "community2",
   point_color_var = "plot_nmds_color",
   ellipse_color_var = "fire_freq",
-  ellipse_linetype_var = "community",
+  ellipse_linetype_var = "community2",
   site_colors = site_colors,
   burn_colors = burn_colors,
   ellipse_level = 0.8,
@@ -205,14 +213,25 @@ inoc.full.fung <- merge_phyloseq(site1.inoc.full,site2.inoc.full,site3.inoc.full
 df_samples <- sample_data(inoc.full.fung) 
 df_samples <- data.frame(df_samples)   
 
-df_samples <- clean_func(df_samples)
+df_samples <- clean_func(df_samples) %>% 
+  mutate(
+    community2 = dplyr::case_when(
+      species == "Snowbrush" ~ "final snowbrush",
+      species == "GrandFir"  ~ "final grandfir",
+      TRUE ~ community
+    )
+  )
+  
 sample_data(inoc.full.fung) <- sample_data(df_samples)
 
 make_ord_plot(
   ps = inoc.full.fung,
   method = "NMDS",
   distance = "bray",
-  site_colors = site_colors,
+  shape_var = "community2",
+  point_color_var = "plot_nmds_color",
+  ellipse_color_var = "fire_freq",
+  ellipse_linetype_var = "community2",  site_colors = site_colors,
   burn_colors = burn_colors,
   trymax = 20
 )$plot +
