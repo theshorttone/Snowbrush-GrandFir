@@ -11,6 +11,7 @@ library(broom); packageVersion("broom")
 library(lmerTest); packageVersion("lmerTest")
 library(broom.mixed); packageVersion("broom.mixed")
 library(ggthemes)
+library(patchwork)
 
 source("./R/shortt_additions/funguild.R")
 source("./R/palettes.R")
@@ -28,6 +29,29 @@ site_colors <- c(
   "Site 3" = "#f0c424", "Site 4" = "#db7e04",
   "Site 5" = "#cc6866", "Site 6" = "#9e0402"
 )
+
+burn_colors <- c(
+  "0" = "#3881F3",
+  "1"   = "#E59D14",
+  "3"   = "#A73634"
+)
+
+
+
+fung <- readRDS("./Output/phyloseq_objects/ITS_clean_phyloseq_object.RDS")
+
+tax_df <- as.data.frame(tax_table(fung)) %>% rownames_to_column("taxon_id")
+
+am_fams <- tax_df %>%
+  filter(Phylum %in% c("Glomeromycota", "p__Glomeromycota")) %>%
+  count(Family, sort = TRUE)
+
+fung_glom <- fung %>%
+  subset_taxa(Phylum %in% c("Glomeromycota", "p__Glomeromycota")) %>%
+  prune_taxa(taxa_sums(.) > 0, .) %>%
+  prune_samples(sample_sums(.) > 0, .)
+
+tax_df <- as.data.frame(tax_table(fung_glom)) %>% rownames_to_column("taxon_id")
 
 
 # functions
@@ -365,7 +389,8 @@ guild_plot_df <- guild_df %>%
                          drought == "ND" ~ "High",
                          TRUE ~ as.character(drought)),
     fire_freq = fct_na_value_to_level(factor(fire_freq), level = "control")
-  )
+  ) %>% 
+  filter(fire_freq != "control") 
 
 #plotting function:
 plot_guild_effects <- function(df,
@@ -425,6 +450,7 @@ plot_guild_effects <- function(df,
   
   p
 }
+
 
 p1 <- plot_guild_effects(guild_plot_df, species_sel="GrandFir", guild="mutualist", color_by="drought", log_x=TRUE)
 p2 <- plot_guild_effects(guild_plot_df, species_sel="GrandFir", guild="pathogen", color_by="drought", log_x=TRUE)
@@ -787,7 +813,8 @@ bar_plot_fire_df <- guild_df2 %>%
   ) %>% 
   mutate(
     fire_freq = factor(fire_freq),
-  )
+  ) %>% 
+  filter(fire_freq != "control")
 
 bar_plot_drought_df <- guild_df2 %>% 
   group_by(species, drought) %>%
@@ -810,13 +837,33 @@ p1 <- ggplot(bar_plot_fire_df,
                     ymax = mean_mutualist + se_mutualist),
                 width = .2,
                 position = position_dodge(.9)) +
-  facet_wrap(~species) +
   scale_fill_manual(values = fire_colors) +
   labs(
     x = "Fire frequency",
     y = "Mean proportion of mutualist fungi"
   )+
   theme_few()
+p1
+
+a <- bar_plot_fire_df %>% 
+  filter(species == "GrandFir") %>% 
+  filter((!is.na(fire_freq))) 
+
+p <- ggplot(a,
+             aes(x = fire_freq, y = mean_mutualist, fill = fire_freq)) +
+  geom_col() +
+  geom_errorbar(aes(ymin = mean_mutualist - se_mutualist,
+                    ymax = mean_mutualist + se_mutualist),
+                width = .2,
+                position = position_dodge(.9)) +
+  scale_fill_manual(values = fire_colors) +
+  labs(
+    title = "Grand Fir",
+    x = "Fire frequency",
+    y = "Mean proportion of mutualist fungi"
+  )+
+  theme_few()
+p
 
 p2 <- ggplot(bar_plot_fire_df,
        aes(x = fire_freq, y = mean_pathogen, fill = fire_freq)) +
@@ -1163,13 +1210,14 @@ bar_plot_site_df <- guild_df_inoc %>%
 
 p1 <- ggplot(bar_plot_fire_df,
              aes(x = fire_freq, y = mean_mutualist, fill = fire_freq)) +
-  geom_col() +
-  geom_errorbar(aes(ymin = mean_mutualist - se_mutualist,
+  geom_col(alpha = 0.7, color = NA) +
+  # outline only (opaque)
+  geom_col(fill = NA, color = "black", linewidth = 0.4) +  geom_errorbar(aes(ymin = mean_mutualist - se_mutualist,
                     ymax = mean_mutualist + se_mutualist),
                 width = .2,
                 position = position_dodge(.9)) +
   facet_wrap(~species) +
-  scale_fill_manual(values = fire_colors) +
+  scale_fill_manual(values = burn_colors) +
   labs(
     title = "Inoculum",
     x = "Fire frequency",
@@ -1261,6 +1309,27 @@ phylum_colors <- c(
   "#E66101",  # warm orange-brown, distinct from pure orange
   "#4D4D4D"   # neutral charcoal for grounding
 )
+phylum_colors_25 <- c(
+  "#CBD588", "#5F7FC7", "orange", "#DA5724", "#508578", "#CD9BCD",
+  "#8a592f", "#673770", "#D14285", "#652926", "#C84248", 
+  "#8569D5", "#5E738F", "#D1A33D", "#8A7C64", "#599861",
+  
+  # Added 5 new distinct colors
+  "#1FA187",  # teal
+  "#F6E8C3",  # light sand
+  "#B8E186",  # soft green (not overlapping your darker greens)
+  "#E66101",  # warm orange-brown, distinct from pure orange
+  "#4D4D4D" ,  # neutral charcoal for grounding
+  
+  # Added 4 more distinct colors
+  "#2C7BB6",  # clear blue
+  "#D7191C",  # strong red
+  "#FDAE61",  # apricot
+  "#ABD9E9"   # pale sky blue
+  
+)
+
+
 
 mutualist_guilds <- 
   grep("Ectomycorrhizal",(fung_ra_traits@tax_table[,8]),value = TRUE) %>% 
@@ -1286,7 +1355,7 @@ ps_genus_20 <- ecm_ps %>%
   transform_sample_counts(function(x) {x / sum(x)}) %>% 
   psmelt() %>%                                         
   filter(Abundance > 0.03) %>%                        
-  mutate(Family = ifelse(Abundance < 0.2, "Other", Genus))
+  mutate(Family = ifelse(Abundance < 0.05, "Other", Genus))
 
 ggplot(ps_genus_20)+
   aes(x = sample_name, y = Abundance, fill = fct_rev(fct_infreq(Genus))) +
@@ -1307,9 +1376,103 @@ ggplot(ps_genus_20)+
   )+
   theme_few()
 
-a <- as.data.frame(tax_table(ecm_ps))
 
-a <- as.data.frame(sam_data(ecm_ps))
+# improved ----------------------------------------------------------------
+#reset
+a <- ps_genus_20
+
+ps_genus_20 <- a
+
+# ---- 1) global genus levels (pick a rule; here: by overall mean abundance) ----
+genus_levels <- ps_genus_20 %>%
+  group_by(Genus) %>%
+  summarise(mean_abund = mean(Abundance, na.rm = TRUE), .groups = "drop") %>%
+  arrange(desc(mean_abund)) %>%
+  pull(Genus)
+
+pal16 <- unname(phylum_colors)
+
+genus_colors <- setNames(
+  rep(pal16, length.out = length(genus_levels)),
+  genus_levels
+)
+
+
+missing <- setdiff(genus_levels, names(genus_colors))
+if (length(missing) > 0) {
+  genus_colors[missing] <- "grey80"  # or set a fallback palette
+}
+
+# assumes you already have:
+# - ps_genus_20 (with inoculum_site, sample_name, Abundance, Genus)
+# - genus_colors (named vector: names = genus levels)
+# - genus_levels (character vector of all genera, in the order you want)
+
+
+# make sure Genus has fixed global levels (important for consistent legend/colors)
+ps_genus_20 <- ps_genus_20 %>%
+  filter(!is.na(Genus), Genus != "") %>%
+  mutate(Genus = factor(Genus, levels = genus_levels))
+
+sites <- sort(unique(ps_genus_20$inoculum_site))
+
+# build 7 plots
+plots_by_site <- setNames(lapply(sites, function(s) {
+  df_s <- ps_genus_20 %>% filter(inoculum_site == s)
+  
+  ggplot(df_s, aes(x = sample_name, y = Abundance, fill = Genus)) +
+    geom_col(position = "fill") +
+    scale_fill_manual(values = genus_colors, drop = FALSE, na.translate = FALSE) +
+    labs(
+      x = "Sample",
+      y = "Proportion of Genera",
+      fill = "Genus",
+      title = s
+    ) +
+    theme_few() +
+    theme(
+      legend.position = "right",
+      legend.title = element_text(size = 8),
+      legend.text  = element_text(size = 6),
+      legend.key.size = unit(0.5, "lines"),
+      legend.spacing = unit(0.5, "lines")
+    )
+}), sites)
+
+plots_by_site
+
+
+
+
+# --- 1) Reference plot (ALL data; not filtered by inoculum_site) ---
+p_ref <- ggplot(ps_genus_20, aes(x = sample_name, y = Abundance, fill = Genus)) +
+  geom_col(position = "fill") +
+  scale_fill_manual(values = genus_colors, drop = FALSE, na.translate = FALSE) +
+  labs(fill = "Genus") +
+  theme_few() +
+  theme(legend.position = "right")
+
+# extract legend from reference
+leg <- cowplot::get_legend(p_ref)
+legend_panel <- wrap_elements(full = leg)
+
+# --- 2) Turn off legends in the 7 site plots ---
+plots_noleg <- lapply(plots_by_site, \(p) p + theme(legend.position = "none"))
+
+# --- 3) 3x3 grid (7 + 2 blanks) + legend once ---
+grid_3x3 <- wrap_plots(
+  c(plots_noleg, list(plot_spacer(), plot_spacer())),
+  ncol = 3
+)
+
+final_plot <- grid_3x3 | legend_panel +
+  plot_layout(widths = c(1, 0.30))  # adjust legend column width
+
+final_plot
+
+
+# inoculum same fig tho ---------------------------------------------------
+
 
 mutualist_guilds <- 
   grep("Ectomycorrhizal",(inoculation_traits_ra@tax_table[,8]),value = TRUE) %>% 
@@ -1338,10 +1501,12 @@ ps_genus_20 <- ecm_ps %>%
   filter(Abundance > 0.01) %>%                        
   mutate(Family = ifelse(Abundance < 0.2, "Other", Genus))
 
+ps_genus_20
+
 ggplot(ps_genus_20)+
-  aes(x = fire_freq, y = Abundance, fill = fct_rev(fct_infreq(Genus))) +
+  aes(x = plot_nmds_color, y = Abundance, fill = fct_rev(fct_infreq(Genus))) +
   geom_col(position = "fill") +  
-  scale_fill_manual(values = phylum_colors) +
+  scale_fill_manual(values = genus_colors) +
   theme(legend.position = "right",                 
         legend.title = element_text(size = 8),      
         legend.text = element_text(size = 6),      
@@ -1362,9 +1527,117 @@ a <- as.data.frame(tax_table(ecm_ps))
 a <- as.data.frame(sam_data(ecm_ps))
 
 
+
+
+# figure for grant  -------------------------------------------------------
+inoculation_traits_ra
+
+asv_counts_by_fire <- inoculation_traits_ra %>%
+  psmelt() %>%                                  # ASV-level long df
+  mutate(fire_freq = as.character(fire_freq)) %>%
+  filter(Abundance > 0) %>%                     # present
+  distinct(fire_freq, OTU) %>%                  # unique ASVs per fire_freq
+  count(fire_freq, name = "n_ASVs")
+
+asv_counts_by_fire
+
+ps_20_fung <- inoculation_traits_ra %>%
+  tax_glom(taxrank = "Family") %>%                    
+  transform_sample_counts(function(x) x / sum(x)) %>% 
+  psmelt() %>%                                         
+  filter(Abundance > 0.01) %>%                        
+  mutate(
+    fire_freq = factor(as.character(fire_freq), levels = c("0","1","3")),
+    Family = as.character(Family),
+    Family = str_remove(Family, "^f__"),
+    Family = if_else(Abundance < 0.07, "Other", Family)
+  ) %>%
+  group_by(Family) %>%
+  mutate(.tot = sum(Abundance, na.rm = TRUE)) %>%
+  ungroup() %>%
+  mutate(
+    Family = fct_reorder(Family, .tot, .desc = FALSE),
+    Family = fct_relevel(Family, "Other", after = Inf)
+  ) %>%
+  select(-.tot)
+
+ggplot(ps_20_fung, aes(x = fire_freq, y = Abundance, fill = Family)) +
+  geom_col(color = "black", linewidth = 0.1) +
+  scale_fill_manual(values = phylum_colors_25, drop = FALSE, na.translate = FALSE) +
+  labs(
+    x = "Fire Frequency",
+    y = "Proportion of Community",
+    fill = "Family",
+    title = ""
+  ) +
+  theme_few()  
+
+#bact
+
+site1.inoc.full <- readRDS("Output/phyloseq_objects/16S_site1.inoc.full.RDS")
+site2.inoc.full <- readRDS("Output/phyloseq_objects/16S_site2.inoc.full.RDS")
+site3.inoc.full <- readRDS("Output/phyloseq_objects/16S_site3.inoc.full.RDS")
+site4.inoc.full <- readRDS("Output/phyloseq_objects/16S_site4.inoc.full.RDS")
+site5.inoc.full <- readRDS("Output/phyloseq_objects/16S_site5.inoc.full.RDS")
+site6.inoc.full <- readRDS("Output/phyloseq_objects/16S_site6.inoc.full.RDS")
+
+inoc.full_16<- merge_phyloseq(site1.inoc.full,site2.inoc.full,site3.inoc.full,
+                           site4.inoc.full,site5.inoc.full,site6.inoc.full)
+
+
+# Pull sample data
+df_samples <- sample_data(inoc.full_16) %>%
+  data.frame()
+
+# Clean (your function)
+df_samples <- clean_func(df_samples)
+
+# Keep only inoculum
+df_samples <- df_samples %>%
+  dplyr::filter(tolower(trimws(community)) == "inoculum")
+
+# Push back into phyloseq
+sample_data(inoc.full_16) <- sample_data(df_samples)
+
+# Prune the phyloseq object to match
+inoc.full_16 <- prune_samples(rownames(df_samples), inoc.full_16)
+bact_inoc_ra<- transform_sample_counts(inoc.full_16,function(x){x/sum(x)})
+
+asv_counts_by_fire
+
+ps_20_bact <- bact_inoc_ra %>%
+  tax_glom(taxrank = "Family") %>%
+  transform_sample_counts(function(x) x / sum(x)) %>%
+  psmelt() %>%
+  filter(Abundance > 0) %>%
+  mutate(
+    fire_freq = as.character(fire_freq),
+    Family = if_else(Abundance < 0.04, "Other", as.character(Family))
+  ) %>%
+  group_by(Family) %>%
+  mutate(.tot = sum(Abundance, na.rm = TRUE)) %>%   # overall abundance across all rows
+  ungroup() %>%
+  mutate(Family = fct_reorder(Family, .tot, .desc = FALSE)) %>%  # biggest first
+  select(-.tot)
+
+ggplot(ps_20_bact, aes(x = fire_freq, y = Abundance, fill = Family)) +
+  geom_col(color = "black", linewidth = 0.1) +
+  scale_fill_manual(values = phylum_colors_25, drop = FALSE, na.translate = FALSE) +
+  labs(x = "Fire Frequency", y = "Proportion of Family", fill = "Family") +
+  theme_few()
+
+
+sum <- ps_20_bact %>% 
+  group_by(fire_freq) %>% 
+  summarise(
+    reads = n()
+  )
+
+
+
 # Corncob for growth ------------------------------------------------------
 library(corncob)
-fung <- readRDS("./Output/phyloseq_objects/ITS_clean_phyloseq_object.RDS")
+fung <- readRDS("./output/physeq/fung_clean_physeq.RDS")
 
 
 #adding scaled and combined growth 
@@ -1461,3 +1734,36 @@ coef_df <- bind_rows(lapply(names(fit$all_models), function(id) {
 # sanity check
 nrow(coef_df)
 head(coef_df)
+
+
+# pathogen exploration --------------------------------------------------------
+a <- fung_ra %>% 
+  subset_taxa(fung_ra_traits@tax_table[,8] %in% saprotroph_guilds)
+b <- data.frame(tax_table(a))
+
+path <- a %>%
+  tax_glom(taxrank = "Genus") %>%                    
+  transform_sample_counts(function(x) {x / sum(x)}) %>% 
+  psmelt() %>%                                         
+  filter(Abundance > 0.05) %>%                        
+  mutate(Family = ifelse(Abundance < 0.05, "Other", Genus))
+
+ggplot(path)+
+  aes(x = species, y = Abundance, fill = fct_rev(fct_infreq(Genus))) +
+  #facet_wrap(~species)+
+  geom_col(position = "fill") +  
+  scale_fill_manual(values = phylum_colors) +
+  theme(legend.position = "right",                 
+        legend.title = element_text(size = 8),      
+        legend.text = element_text(size = 6),      
+        legend.key.size = unit(0.5, "lines"),       
+        legend.spacing = unit(0.5, "lines")) +  
+  guides(alpha = "none")+
+  labs(
+    x = "leaf_num",
+    y = "Proportion of Genera",
+    fill = "Genus",
+    title = "Pathogen general in final community"
+  )+
+  theme_few()
+  

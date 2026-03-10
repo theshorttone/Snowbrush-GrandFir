@@ -121,7 +121,7 @@ fitgr <- differentialTest(
   phi.formula_null = ~ 1,
   test = "Wald",
   fdr_cutoff = 0.05,
-  data = ps_gr_genus
+  data = ps_grandfir
 )
 
 fitcn <- differentialTest(
@@ -131,7 +131,7 @@ fitcn <- differentialTest(
   phi.formula_null = ~ 1,
   test = "Wald",
   fdr_cutoff = 0.05,
-  data = ps_cn_genus
+  data = ps_ceanotus
 )
 
 plot(fitgr)

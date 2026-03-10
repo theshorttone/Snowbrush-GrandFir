@@ -41,6 +41,10 @@ readRenviron("./.Renviron")
 # Data
 bact <- readRDS("./Output/phyloseq_objects/16S_clean_phyloseq_object.RDS")
 
+a <- data.frame(tax_table(bact)) %>% filter(family == "Rhi"
+  
+))
+
 # reload point, for convenience
 bact_trait_db <- readRDS("./Output/16S_Bacterial_Trait_Database.RDS")
 

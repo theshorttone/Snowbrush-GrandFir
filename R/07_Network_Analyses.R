@@ -24,7 +24,7 @@ library(broom); packageVersion("broom")
 library(corncob); packageVersion("corncob")
 library(patchwork); packageVersion("patchwork")
 library(igraph); packageVersion("igraph")
-library(SpiecEasi); packageVersion("SpiecEasi")
+library(SpiecEasi); packageVersion("SpiecEasi") # >devtools::install_github("zdk123/SpiecEasi")
 library(zahntools); packageVersion("zahntools") # devtools::install_github("gzahn/zahntools")
 library(parallel); packageVersion("parallel")
 library(hubfindr); packageVersion("hubfindr") # devtools::install_github("gzahn/hubfindr")
@@ -106,7 +106,7 @@ fung <- fung %>% subset_taxa(taxa_sums(fung) > 0)
 
 amf <- readRDS("./Output/phyloseq_objects/18S_clean_phyloseq_object.RDS")
 amf <- amf %>% 
-  subset_taxa(Subdivision == "Glomeromycotina")
+  subset_taxa(Subdivision == "Glomeromycotina") #this doen't work for me 
 amf <- amf %>% 
   subset_taxa(taxa_sums(amf) > 0)
 
@@ -184,8 +184,8 @@ se.mb.full <- SpiecEasi::spiec.easi(data = full_ra,
                                     method='mb',
                                     sel.criterion = "bstars",
                                     pulsar.params=se.params)
-saveRDS(se.mb.fung,"./Output/Full_SpiecEasi_out.RDS")
-se.mb.fung <- readRDS("./Output/Full_SpiecEasi_out.RDS")
+saveRDS(se.mb.full,"./Output/Full_SpiecEasi_out.RDS") #changed name here to be right
+se.mb.full <- readRDS("./Output/Full_SpiecEasi_out.RDS")
 
 # fungal
 se.mb.fung <- SpiecEasi::spiec.easi(data = fung,

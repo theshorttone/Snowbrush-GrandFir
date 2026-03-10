@@ -43,8 +43,8 @@ bact <- readRDS("./Output/phyloseq_objects/16S_clean_phyloseq_object.RDS")
 
 # initialize bacdive connection (add your userid and password)
 # BacDive URL: https://bacdive.dsmz.de/
-bacdive <- BacDive::open_bacdive(username = Sys.getenv("BACDIVE_USER"),
-                                 password = Sys.getenv("BACDIVE_PW"))
+bacdive <- BacDive::open_bacdive("zachary.shortt@wsu.edu",
+                                 "C5tgLACQiiNG!kG")
 
 
 # get list of unique genera
@@ -377,7 +377,6 @@ full_guild_model_df <-
   dplyr::filter(effect=="fixed") %>% 
   select(-group)
 full_guild_model_df
-
 
 # PLOT ALL GUILD EFFECTS ####
 full_guild_model_df <- full_guild_model_df %>% 

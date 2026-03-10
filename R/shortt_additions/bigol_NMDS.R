@@ -21,6 +21,7 @@ burn_colors <- c(
 )
 
 
+
 # plotting functions ------------------------------------------------------
 
 #via Geooff:
@@ -177,26 +178,92 @@ df_samples <- clean_func(df_samples) %>%
 sample_data(inoc.full) <- sample_data(df_samples)
 
 
-make_ord_plot(
-  ps = inoc.full,
-  method = "NMDS",
-  distance = "bray",
-  shape_var = "community2",
-  point_color_var = "plot_nmds_color",
-  ellipse_color_var = "fire_freq",
-  ellipse_linetype_var = "community2",
-  site_colors = site_colors,
-  burn_colors = burn_colors,
-  ellipse_level = 0.8,
-  ellipse_type = "t",
-  trymax = 20
-)$plot +
+just_inoc <- subset_samples(inoc.full, community == "inoculum")
+
+
+
+a <- data.frame(sample_data(just_inoc))
+
+
+ps_rel <- phyloseq::transform_sample_counts(just_inoc, function(x) x / sum(x))
+
+sample_data(ps_rel)$fire_freq <- factor(sample_data(ps_rel)$fire_freq)
+
+
+ord <- phyloseq::ordinate(ps_rel, 
+                          method = "NMDS", 
+                          distance = "bray")
+
+
+
+# ---- base plot (points) ----
+p <- phyloseq::plot_ordination(
+  ps_rel, ord,
+  shape = "fire_freq",
+  color = "fire_freq"
+  
+) +
+  stat_ellipse(
+    aes(group = fire_freq),
+    linewidth = 0.7
+  )+
+  scale_color_manual(values = burn_colors,
+                    name = "Inoculation site")+
+ scale_shape_manual(
+   values = c(16, 17, 18),
+  name = "Community",
+  guide = "none"
+ )+
   labs(
-    title = "NMDS of 16S gene sequences Stress = 0.15",
-    subtitle = " "
-)
-ggsave("R/shortt_additions/figures/bigol_16S_NMDS_inoculum.png",
-       width = 6, height = 5)
+    title = "Bacteria Inoculum"
+    )+
+  theme_few()
+p
+
+##final bact ------------------------------------------------------------
+
+final_bact <- subset_samples(inoc.full, community != "inoculum")
+
+
+a <- data.frame(sample_data(final_bact))
+
+
+ps_rel <- phyloseq::transform_sample_counts(final_bact, function(x) x / sum(x))
+
+sample_data(ps_rel)$fire_freq <- factor(sample_data(ps_rel)$fire_freq)
+
+
+ord <- phyloseq::ordinate(ps_rel, 
+                          method = "NMDS", 
+                          distance = "bray")
+
+
+
+
+p1 <- phyloseq::plot_ordination(
+  ps_rel, ord,
+  shape = "fire_freq",
+  color = "fire_freq"
+  
+) +
+  stat_ellipse(
+    aes(group = fire_freq),
+    linewidth = 0.7
+  )+
+  scale_color_manual(values = burn_colors,
+                     name = "Inoculation site")+
+  scale_shape_manual(
+    values = c(16, 17, 18),
+    name = "Community",
+    guide = "none"
+  )+
+  labs(
+    title = "Bacteria final community"
+  )+
+  theme_few()
+p1
+
+
 
 
 # Fungal-----------------------------------------------------------------------
@@ -224,6 +291,8 @@ df_samples <- clean_func(df_samples) %>%
   
 sample_data(inoc.full.fung) <- sample_data(df_samples)
 
+
+
 make_ord_plot(
   ps = inoc.full.fung,
   method = "NMDS",
@@ -241,6 +310,102 @@ make_ord_plot(
   )
 ggsave("R/shortt_additions/figures/bigol_ITS_DCA_inoculum.png",
        width = 6, height = 5)
+
+
+just_inoc <- subset_samples(inoc.full.fung, community == "inoculum")
+
+
+a <- data.frame(sample_data(just_inoc))
+
+
+ps_rel <- phyloseq::transform_sample_counts(just_inoc, function(x) x / sum(x))
+
+sample_data(ps_rel)$fire_freq <- factor(sample_data(ps_rel)$fire_freq)
+
+
+ord <- phyloseq::ordinate(ps_rel, 
+                          method = "NMDS", 
+                          distance = "bray")
+
+
+
+# ---- base plot (points) ----
+p <- phyloseq::plot_ordination(
+  ps_rel, ord,
+  shape = "fire_freq",
+  color = "fire_freq"
+  
+) +
+  stat_ellipse(
+    aes(group = fire_freq),
+    linewidth = 0.7
+  )+
+  scale_color_manual(values = burn_colors,
+                     name = "Inoculation site")+
+  scale_shape_manual(
+    values = c(16, 17, 18),
+    name = "Community",
+    guide = "none"
+  )+
+  labs(
+    title = "Fungal Inoculum"
+  )+
+  theme_few()
+p
+
+final_fung <- subset_samples(inoc.full.fung, community != "inoculum")
+
+source("./R/shortt_additions/funguild.R")
+
+guilds <- assign_funguild_to_phyloseq(final_fung)
+
+ps_guild <- guilds [[1]]
+
+ps_ecm <- subset_taxa(ps_guild, guild_fg == "Ectomycorrhizal")
+
+ps_rel <- phyloseq::transform_sample_counts(ps_ecm, function(x) x / sum(x))
+
+
+a <- data.frame(sample_data(final_fung))
+
+
+#ps_rel <- phyloseq::transform_sample_counts(final_fung, function(x) x / sum(x))
+
+sample_data(ps_rel)$fire_freq <- factor(sample_data(ps_rel)$fire_freq)
+
+
+ord <- phyloseq::ordinate(ps_rel, 
+                          method = "NMDS", 
+                          distance = "bray")
+
+
+
+
+p1 <- phyloseq::plot_ordination(
+  ps_rel, ord,
+  shape = "fire_freq",
+  color = "fire_freq"
+  
+) +
+  stat_ellipse(
+    aes(group = fire_freq),
+    linewidth = 0.7
+  )+
+  scale_color_manual(values = burn_colors,
+                     name = "Inoculation site")+
+  scale_shape_manual(
+    values = c(16, 17, 18),
+    name = "Community",
+    guide = "none"
+  )+
+  labs(
+    title = "Fungal EcM community"
+  )+
+  theme_few()
+p1
+
+ggsave(p1)
+
 
 
 # AM (18S)---------------------------------------------------------------------

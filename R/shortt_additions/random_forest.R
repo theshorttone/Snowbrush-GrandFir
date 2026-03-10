@@ -22,7 +22,7 @@ run_rf_growth <- function(ps,
                                      tax_rank          = "Genus",
                                      num_trees         = 999,
                                      seed              = 2,
-                                     num_features_vip = 20,
+                                     num_features_vip = 30,
                                      out_dir           = NULL) {
   
   # ---- packages ----
@@ -108,7 +108,7 @@ run_rf_growth <- function(ps,
     
     top_20 <- vip::vi_model(rf_mod) %>%
       dplyr::arrange(dplyr::desc(Importance)) %>%
-      dplyr::slice_head(n = 20)
+      dplyr::slice_head(n = 30)
     
     top_taxa_dfs[[growth_var]] <- top_20
     print (paste0("Completed for ", growth_var))
@@ -268,32 +268,21 @@ write.xlsx(exported_table, "./R/shortt_additions/figures/random_forest/16S_grand
 
 library(pdp)
 
-ordered_tax <- sb_bact$top_taxa_long %>%  
+
+
+ordered_tax <- gr_fung$top_taxa_long %>%  
   dplyr::arrange(dplyr::desc(Importance))
 
-tax <- ordered_tax$Variable[4]
+tax <- ordered_tax$Variable[8]
 pdp::partial(
-  object = sb_bact$models$leaf_number,
+  object = gr_fung$models$leaf_number,
   pred.var = tax,
-  train = sb_bact$df,
+  train = gr_fung$df,
   plot = TRUE
 )
 
 a <- as.data.frame(sample_data(fung))
-                   
-#iml
-#compare list to corncob after making catagorical maybe 3-5 but play around with it 
-#see if there is a good cutoff for growth in terams of leaf number 
-#can add burn freq into the random forest model too
 
-#check out indic species 
-
-#def should compare all these species to the network traits 
-#individual traits have not been looked at with networks so lez do 
-#git hub: statdivlab/radEmu but computationally huge 
-
-
-#bact dive just sucks so don't use it 
 
 
 

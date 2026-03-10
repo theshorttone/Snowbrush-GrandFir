@@ -423,12 +423,14 @@ ord_pca <- ps %>%
 ord_values <- 
   data.frame(
     nmds_1=ord_nmds$points[,1],
-    nmds_2=ord_nmds$points[,1],
-    rda_1=ord_rda$CA$u[,"PC1"],
-    rda_2=ord_rda$CA$u[,"PC2"],
-    pcoa_1=ord_pca$vectors[,"Axis.1"],
-    pcoa_2=ord_pca$vectors[,"Axis.2"]
-  )
+    nmds_2=ord_nmds$points[,2])
+
+
+  #   rda_1=ord_rda$CA$u[,"PC1"],
+  #   rda_2=ord_rda$CA$u[,"PC2"],
+  #   pcoa_1=ord_pca$vectors[,"Axis.1"],
+  #   pcoa_2=ord_pca$vectors[,"Axis.2"]
+  # )
 
 ord_df <- 
   alpha_df %>% 

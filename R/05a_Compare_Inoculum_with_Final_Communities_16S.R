@@ -287,7 +287,7 @@ ord_1 <-
   ordinate(method = "DCA",distance = "unifrac")
 inoc_plot_1 <- plot_ordination(site1.inoc.full,ord_1,color = "community") + scale_color_manual(values=pal.discrete[c(5,2)])
 saveRDS(inoc_plot_1,"./Output/figs/16S_inoc_plot_1.RDS")
-
+inoc_plot_1
 ord_2 <- 
   site2.inoc.full %>% 
   transform_sample_counts(function(x){x/sum(x)}) %>% 

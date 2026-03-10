@@ -23,7 +23,7 @@ library(phylogram) # on CRAN
 
 ## load physeq objects ####
 #ps_its <- readRDS("./Output/ITS_clean_phyloseq_object.RDS)
-ps_16s <- readRDS("./output/16S_clean_phyloseq_object.RDS")
+ps_16s <- readRDS("./output/phyloseq_objects/16S_clean_phyloseq_object.RDS")
 
 ## extract sequences ####
 

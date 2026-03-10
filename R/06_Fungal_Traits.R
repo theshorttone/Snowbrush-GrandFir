@@ -39,6 +39,9 @@ clean_model_df <- function(x){
 }
 '%ni%' <- Negate('%in%')
 
+tax_df <- as.data.frame(tax_table(fung_ra))
+
+
 # load data
 fung <- readRDS("./Output/phyloseq_objects/ITS_clean_phyloseq_object.RDS")
 fung@sam_data %>% row.names()
@@ -66,7 +69,7 @@ tax_df <-
 guild_db <- FUNGuildR::get_funguild_db()
 
 # save guild db as RDS
-saveRDS(guild_db, "./Taxonomy/Funguild_Database.RDS")
+saveRDS(guild_db, "./Output/Funguild_Database.RDS")
 
 # assign guild to fungal ASV taxonomy
 guilds <- FUNGuildR::funguild_assign(tax_df)
@@ -94,7 +97,7 @@ traits_meta <- read_csv("https://github.com/traitecoevo/fungaltraits/releases/do
 
 # download FungalTraits database
 traits_db <- fungaltraits::fungal_traits()
-names(traits_db$species)
+unique(traits_db$species)
 # match taxa at genus level
 genera <- fung@tax_table[,6] %>% str_remove("^g__")
 species <- fung@tax_table[,7] %>% str_remove("^s__")
@@ -636,3 +639,6 @@ ggsave("./Output/figs/ITS_Guild_Plots.tiff",device = 'tiff',height = 8,width = 8
 
 bact_guild_plots
 ggsave("./Output/figs/16S_Guild_Plots.tiff",device = 'tiff',height = 8,width = 8,dpi=350)
+
+
+
