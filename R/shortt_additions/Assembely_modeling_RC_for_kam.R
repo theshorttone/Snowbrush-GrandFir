@@ -10,37 +10,31 @@ graphics.off()
 suppressPackageStartupMessages({
   library(phyloseq)
   library(ecodist)
-  library(parallel)
 })
 
 set.seed(666)
 
-source("./R/shortt_additions/assembly_model/raup_crick_abundance_one_comparison.R")
+source("R/shortt_additions/assembly_model/Raup_Crick_Abundance_One_Comparison.R")
 
 # ----------------------------
 # Settings
 # ----------------------------
 data.set.name <- "ps_5000_rare"
 input_rds <- "./Output/ps_5000_rare.RDS"
-
-# Put RC outputs in their own folder
 out_dir <- file.path("./Output/assembly_model", paste0(data.set.name, "_RC_files"))
 dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
 
-# Number of RC null reps per comparison
 rc_reps <- 999
-
-# Number of cores from SLURM; fallback to 1 if running interactively
-ncores <- as.integer(Sys.getenv("SLURM_CPUS_PER_TASK", "1"))
-if (is.na(ncores) || ncores < 1) ncores <- 1
+abund.for.names <- "weighted"
 
 cat("Starting Raup-Crick Bray run\n")
 cat("Time:", as.character(Sys.time()), "\n")
-cat("Cores:", ncores, "\n")
+cat("Working dir:", getwd(), "\n")
+cat("Input exists:", file.exists(input_rds), "\n")
 cat("Output dir:", out_dir, "\n\n")
 
 # ----------------------------
-# Load phyloseq object and rebuild OTU matrix
+# Load phyloseq object and build OTU matrix
 # ----------------------------
 ps_5000_rare <- readRDS(input_rds)
 
@@ -49,30 +43,39 @@ if (taxa_are_rows(ps_5000_rare)) {
   otu <- t(otu)
 }
 
-# sanity checks
 stopifnot(nrow(otu) >= 2, ncol(otu) >= 2)
-cat("OTU dimensions (samples x taxa):", nrow(otu), "x", ncol(otu), "\n")
 
-# rebuild bray only to get final matrix dimensions/names
+cat("OTU dimensions (samples x taxa):", nrow(otu), "x", ncol(otu), "\n")
+cat("OTU object size:", format(object.size(otu), units = "GB"), "\n")
+
+# Build Bray only for final matrix dimensions/names
 bray <- as.matrix(distance(otu, method = "bray-curtis"))
+bray_nrow <- nrow(bray)
+bray_ncol <- ncol(bray)
+bray_dimnames <- dimnames(bray)
+
 no.of.samples <- nrow(otu)
-abund.for.names <- "weighted"
 
 cat("Number of samples:", no.of.samples, "\n")
 cat("Number of pairwise comparisons:", choose(no.of.samples, 2), "\n\n")
 
-# ----------------------------
-# Build pair table
-# ----------------------------
-pair_df <- expand.grid(
-  i = seq_len(no.of.samples - 1),
-  j = seq_len(no.of.samples),
-  KEEP.OUT.ATTRS = FALSE,
-  stringsAsFactors = FALSE
-)
+# Drop large objects no longer needed
+rm(ps_5000_rare, bray)
+gc()
 
-pair_df <- pair_df[pair_df$i < pair_df$j, , drop = FALSE]
-row.names(pair_df) <- NULL
+cat("Memory after cleanup:\n")
+print(gc())
+cat("\n")
+
+# ----------------------------
+# Build unique pair table
+# ----------------------------
+pair_df <- as.data.frame(t(combn(no.of.samples, 2)))
+names(pair_df) <- c("i", "j")
+
+cat("First few sample pairs:\n")
+print(utils::head(pair_df, 10))
+cat("\n")
 
 # ----------------------------
 # One comparison
@@ -105,24 +108,21 @@ run_one_rc <- function(k) {
   
   write.csv(rc, out_file, row.names = TRUE, quote = FALSE)
   
+  rm(rc)
+  gc(verbose = FALSE)
+  
   paste("Finished:", i, j)
 }
 
 # ----------------------------
-# Run pairwise comparisons in parallel
+# Run pairwise comparisons serially
 # ----------------------------
-cat("Launching parallel RC comparisons...\n")
+cat("Launching serial RC comparisons...\n")
 cat("Time:", as.character(Sys.time()), "\n\n")
 
-msgs <- mclapply(
-  X = seq_len(nrow(pair_df)),
-  FUN = run_one_rc,
-  mc.cores = ncores,
-  mc.preschedule = FALSE
-)
+msgs <- lapply(seq_len(nrow(pair_df)), run_one_rc)
 
-# print a subset of messages to the log
-cat("Example worker messages:\n")
+cat("Example messages:\n")
 print(utils::head(unlist(msgs), 20))
 cat("\n")
 
@@ -147,9 +147,9 @@ if (length(all.RC) == 0) {
 
 raup.crick.out <- matrix(
   NA,
-  nrow = nrow(bray),
-  ncol = ncol(bray),
-  dimnames = dimnames(bray)
+  nrow = bray_nrow,
+  ncol = bray_ncol,
+  dimnames = bray_dimnames
 )
 
 for (f in all.RC) {
@@ -180,7 +180,6 @@ for (f in all.RC) {
   raup.crick.out[rr, cc] <- RC.temp[1, 1]
 }
 
-# convert upper triangle vector into full dist-style object then matrix/data.frame
 raup.crick.out <- as.data.frame(as.matrix(as.dist(raup.crick.out)))
 
 final_out <- file.path(
