@@ -23,29 +23,27 @@ library(phylogram) # on CRAN
 
 ## load physeq objects ####
 #ps_its <- readRDS("./Output/ITS_clean_phyloseq_object.RDS)
-ps_16s <- readRDS("./output/phyloseq_objects/16S_clean_phyloseq_object.RDS")
+ps_16s <- readRDS("./Output/phyloseq_objects/16S_clean_phyloseq_object.RDS")
 
 ## extract sequences ####
 
 seqs_16s <- rownames(tax_table(ps_16s))
 names(seqs_16s) <- paste0("ASV_",1:length(seqs_16s)) # This propagates to the tip labels of the tree
-#seqs_its <- rownames(tax_table(ps_its))
-#names(seqs_its) <- paste0("ASV_",1:length(seqs_its)) # This propagates to the tip labels of the tree
 
 
 
 # ALIGNMENT ####
 alignment_16s <- DECIPHER::AlignSeqs(DNAStringSet(seqs_16s),processors=NULL)
-saveRDS(alignment_16s,"./output/16S_dna_alignment.RDS")
+saveRDS(alignment_16s,"./Output/16S_dna_alignment.RDS")
 
-Biostrings::writeXStringSet(alignment_16s, "./output/16S_ASV_aligned.fasta")
+Biostrings::writeXStringSet(alignment_16s, "./Output/16S_ASV_aligned.fasta")
 
 #Build Tree with FastTree
-cmd <- system("FastTree -nt -gtr -gamma ./output/16S_ASV_aligned.fasta > ./output/16S_fasttree.nwk")
+cmd <- "FastTree -nt -gtr -gamma ./Output/16S_ASV_aligned.fasta > ./Output/16S_fasttree.nwk"
 status <- system(cmd)
-stopifnot(status == 0, file.exists("./output/16S_fasttree.nwk"))
+stopifnot(status == 0, file.exists("./Output/16S_fasttree.nwk"))
 
-tree_16s <- ape::read.tree("./output/16S_fasttree.nwk")
+tree_16s <- ape::read.tree("./Output/16S_fasttree.nwk")
 
 # relabel tips from ASV_# -> phyloseq taxa_names (your original sequence strings)
 map_16s <- setNames(taxa_names(ps_16s), names(seqs_16s))
@@ -60,5 +58,5 @@ stopifnot(!is.null(tree_16s$edge.length))
 ps_16s_w_tree <- merge_phyloseq(ps_16s, phy_tree(tree_16s))
 
 # export
-saveRDS(ps_16s_w_tree, "./output/16S_Physeq_cleaned_w_tree.RDS")
+saveRDS(ps_16s_w_tree, "./Output/16S_Physeq_cleaned_w_tree.RDS")
 #saveRDS(ps_its_w_tree,"./output/ITS_Physeq_cleaned_w_tree.RDS")
