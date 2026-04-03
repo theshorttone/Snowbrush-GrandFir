@@ -1,3 +1,5 @@
+data.set.name <- "snowbrush_april_2026"
+
 out_dir <- "./outputs/assembly_model"
 null_dir <- file.path(out_dir, "null_reps")
 
