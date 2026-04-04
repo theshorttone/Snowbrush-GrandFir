@@ -19,14 +19,6 @@ all.files <- sort(as.numeric(
   )
 ))
 
-## find beta.mntd reps that still need to be done; if there are any, need to do them before proceeding
-reps.to.do <- c(1:no.reps)[-which(1:no.reps %in% all.files)]
-reps.to.do
-
-#write.table(t(reps.to.do),
-#            file.path(out_dir, "reps.to.do.txt"),
-#            sep = " ", quote = FALSE, row.names = FALSE, col.names = FALSE)
-
 beta.nti.weighted <- beta.nti.calc.stegen(
   samp = otu,
   reps = all.files,
