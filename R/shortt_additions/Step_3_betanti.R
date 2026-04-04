@@ -1,5 +1,8 @@
 data.set.name <- "snowbrush_april_2026"
 
+source("R/shortt_additions/assembly_model/raup_crick_abundance_one_comparison.R")
+source("R/shortt_additions/assembly_model/beta.nti.R")
+
 out_dir <- "./outputs/assembly_model"
 null_dir <- file.path(out_dir, "null_reps")
 
