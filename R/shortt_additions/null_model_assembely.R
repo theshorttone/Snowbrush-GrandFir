@@ -26,7 +26,7 @@ for (i in start_rep:end_rep) {
   
   outfile <- file.path(
     null_dir,
-    sprintf("%s_bMNTD_weighted_rep_%03d.rds", data.set.name, i)
+    sprintf("%s_bMNTD_weighted_rep_%03d.csv", data.set.name, i)
   )
   
   if (file.exists(outfile)) next
@@ -41,7 +41,8 @@ for (i in start_rep:end_rep) {
     )
   )
   
-  saveRDS(rand.weighted.beta.mntd, outfile)
+  write.csv(rand.weighted.beta.mntd, outfile, row.names = TRUE)
+  
   rm(rand.weighted.beta.mntd)
   gc()
 }
