@@ -19,8 +19,10 @@ source("R/shortt_additions/assembly_model/Raup_Crick_Abundance_One_Comparison.R"
 # Settings
 # ----------------------------
 data.set.name <- "snowbrush_april_2026"
-input_rds <- file.path("./Output/assembly_model", paste0(data.set.name, "_OTU_table.RDS"))
-out_dir <- file.path("./output/assembly_model/rc_files", paste0(data.set.name, "_RC_files"))
+otu_dir  <- "./outputs/assembly_model"
+input_rds <- file.path(otu_dir, paste0(data.set.name, "_OTU_table.RDS"))
+otu <- readRDS(input_rds)
+out_dir <- file.path("./outputs/assembly_model/rc_files", paste0(data.set.name, "_RC_files"))
 dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
 
 rc_reps <- 999
