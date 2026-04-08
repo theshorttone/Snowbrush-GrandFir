@@ -16,14 +16,15 @@ beta.mntd.weighted <- read.csv(
 )
 
 # get all null model rep numbers
-all.files <- sort(as.integer(
-  gsub(
+all.files <- sort(sprintf(
+  "%03d",
+  as.integer(gsub(
     ".*_rep_|\\.csv", "",
     list.files(
       null_dir,
       pattern = paste0(data.set.name, "_bMNTD_weighted_rep_\\d+\\.csv$")
     )
-  )
+  ))
 ))
 
 beta.nti.weighted <- beta.nti.calc.stegen(
